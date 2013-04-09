@@ -27,6 +27,7 @@
 #include "bt-service-agent.h"
 #include "bt-service-gap-agent.h"
 #include "bt-service-adapter.h"
+#include "bt-service-device.h"
 
 static DBusGConnection *connection = NULL;
 
@@ -786,6 +787,19 @@ gboolean gap_agent_reply_authorize(GapAgent *agent, const guint accept,
 	if (priv->exec_type != GAP_AGENT_EXEC_NO_OPERATION &&
 						priv->reply_context != NULL) {
 		if (accept == GAP_AGENT_ACCEPT) {
+			dbus_g_method_return(priv->reply_context);
+		} else if (accept == GAP_AGENT_ACCEPT_ALWAYS) {
+			bluetooth_device_address_t addr = {{0,}};
+			int result;
+
+			_bt_convert_addr_string_to_type(addr.addr,
+							priv->authorize_addr);
+
+			result = _bt_set_authorization(&addr, TRUE);
+			if (result == BLUETOOTH_ERROR_NONE) {
+				BT_DBG("Device added to trusted");
+			}
+
 			dbus_g_method_return(priv->reply_context);
 		} else {
 			GError *error = NULL;
