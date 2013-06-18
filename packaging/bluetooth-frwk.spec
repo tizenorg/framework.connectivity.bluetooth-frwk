@@ -123,6 +123,7 @@ vconftool set -tf int memory/bluetooth/btsco "0" -g 6520 -i
 %{_bindir}/bt-service
 %{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk-service.service
 %{_libdir}/systemd/user/bluetooth-frwk-service.service
+/etc/smack/accesses.d/bluetooth-frwk-service.rule
 %attr(0666,-,-) /opt/var/lib/bluetooth/auto-pair-blacklist
 
 %files core

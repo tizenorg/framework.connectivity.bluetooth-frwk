@@ -76,6 +76,7 @@ ADD_EXECUTABLE(${PROJECT_NAME} ${SRCS})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${service_pkgs_LDFLAGS})
 
 INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/org.projectx.bt.service DESTINATION share/dbus-1/services)
+INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/bluetooth-frwk-service.rule DESTINATION /etc/smack/accesses.d)
 INSTALL(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
 INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/auto-pair-blacklist DESTINATION /opt/var/lib/bluetooth)
