@@ -1,1 +1,2 @@
 bt-service _ w
+bt-service device::sys_logging w
