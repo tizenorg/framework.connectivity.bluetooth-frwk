@@ -22,6 +22,7 @@
 
     <assign>
         <filesystem path="/etc/init.d/bluetooth-frwk-service" label="_" exec_label="none" />
+        <filesystem path="/usr/share/dbus-1/services/bluetooth-frwk-service.service" label="_"/>
     </assign>
 
     <request>
