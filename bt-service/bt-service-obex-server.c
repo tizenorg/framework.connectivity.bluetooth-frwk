@@ -545,18 +545,16 @@ int _bt_unregister_obex_server(void)
 
 gboolean __bt_check_folder_path(const char *dest_path)
 {
-	DIR *dp;
+	int ret;
 
 	retv_if(dest_path == NULL, TRUE);
 
-	dp = opendir(dest_path);
+	ret = access(dest_path, W_OK);
 
-	if (dp == NULL) {
-		BT_ERR("The directory does not exist");
+	if (ret < 0) {
+		BT_ERR("The directory can not be accessible: [%d]", ret);
 		return FALSE;
 	}
-
-	closedir(dp);
 
 	return TRUE;
 }
@@ -688,19 +686,12 @@ int _bt_obex_server_reject_authorize(void)
 int _bt_obex_server_set_destination_path(const char *dest_path,
 						gboolean is_native)
 {
-	DIR *dp = NULL;
 	bt_server_info_t *server_info;
 
 	BT_CHECK_PARAMETER(dest_path, return);
 
-	dp = opendir(dest_path);
-
-	if (dp == NULL) {
-		BT_ERR("The directory does not exist");
+	if (__bt_check_folder_path(dest_path) == FALSE)
 		return BLUETOOTH_ERROR_INVALID_PARAM;
-	}
-
-	closedir(dp);
 
 	if (is_native == TRUE)
 		server_info = agent_info.native_server;
