@@ -1,2 +1,12 @@
+root bt-service rw---
+_default_ bt-service rw---
 bt-service _ w
 bt-service device::sys_logging w
+bt-service system::vconf_network rw---
+bt-service device::dialout rw---
+bt-service syspopup::db rwx--
+bt-service device::app_logging -w---
+bt-service dbus rwx--
+bt-service system::media rwxat
+bt-service system::share rwxat
+bt-service system::vconf rwxat
