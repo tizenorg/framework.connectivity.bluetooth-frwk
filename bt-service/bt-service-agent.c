@@ -60,7 +60,9 @@
 #define BT_PIN_MAX_LENGTH 16
 #define BT_PASSKEY_MAX_LENGTH 4
 
-#define BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS 200
+#define BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS 300
+
+static int bt_popup_retry_count = 0;
 
 static int __bt_agent_is_auto_response(uint32_t dev_class, const gchar *address,
 							const gchar *name);
@@ -80,20 +82,26 @@ static gboolean __bt_agent_system_popup_timer_cb(gpointer user_data)
 {
 	int ret;
 	bundle *b = (bundle *) user_data;
+	retv_if(b == NULL, FALSE);
 
-	if (NULL == b) {
-		BT_DBG("There is some problem with the user data..popup can not be created\n");
+	if (bt_popup_retry_count > 10) {
+		bt_popup_retry_count = 0;
+		bundle_free(b);
 		return FALSE;
 	}
+
 	ret = syspopup_launch("bt-syspopup", b);
 
-	if (0 > ret)
+	if (0 > ret) {
 		BT_DBG("Sorry Can not launch popup\n");
-	else
+		bt_popup_retry_count++;
+		return TRUE;
+	} else {
 		BT_DBG("Hurray Popup launched \n");
-
-	bundle_free(b);
-	return FALSE;
+		bt_popup_retry_count = 0;
+		bundle_free(b);
+		return FALSE;
+	}
 }
 
 static int __launch_system_popup(bt_agent_event_type_t event_type,
@@ -182,6 +190,7 @@ static int __launch_system_popup(bt_agent_event_type_t event_type,
 	ret = syspopup_launch("bt-syspopup", b);
 	if (0 > ret) {
 		BT_DBG("Popup launch failed...retry %d\n", ret);
+		bt_popup_retry_count = 0;
 		g_timeout_add(BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS,
 			      (GSourceFunc) __bt_agent_system_popup_timer_cb,
 				b);
