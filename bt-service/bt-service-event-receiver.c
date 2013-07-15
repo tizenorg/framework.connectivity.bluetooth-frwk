@@ -330,6 +330,11 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			dbus_message_iter_get_basic(&value_iter, &discoverable);
 
 			if (discoverable == FALSE) {
+                                if (_bt_adapter_get_status() == BT_DEACTIVATING) {
+                                        BT_DBG("Now deactivating");
+                                        return;
+                                }
+
 				if (_bt_get_discoverable_timeout_property() > 0) {
 					g_value_init(&timeout, G_TYPE_UINT);
 					g_value_set_uint(&timeout, 0);
