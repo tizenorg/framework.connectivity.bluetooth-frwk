@@ -344,28 +344,6 @@ static void __bt_flight_mode_cb(keynode_t *node, void *data)
 	}
 }
 
-static void __launch_bt_service(int status, int run_type)
-{
-	bundle *kb;
-	char status_val[5] = { 0, };
-	char run_type_val[5] = { 0, };
-
-	snprintf(status_val, sizeof(status_val), "%d", status);
-	snprintf(run_type_val, sizeof(run_type_val), "%d", run_type);
-
-	BT_DBG("status: %s, run_type: %s", status_val, run_type_val);
-
-	kb = bundle_create();
-
-	bundle_add(kb, "launch-type", "setstate");
-	bundle_add(kb, "status", status_val);
-	bundle_add(kb, "run-type", run_type_val);
-
-	aul_launch_app("com.samsung.bluetooth", kb);
-
-	bundle_free(kb);
-}
-
 static void __bt_adapter_set_status(bt_status_t status)
 {
 	adapter_status = status;
@@ -496,9 +474,6 @@ void _bt_handle_adapter_added(void)
 		BT_ERR("Fail to register agent");
 		return;
 	 }
-
-	if (!aul_app_is_running("com.samsung.bluetooth"))
-		__launch_bt_service(0, 0);
 
 	if (_bt_register_media_player() != BLUETOOTH_ERROR_NONE)
 		BT_ERR("Fail to register media player");
