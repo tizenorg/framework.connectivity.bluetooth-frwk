@@ -820,7 +820,7 @@ gboolean __bt_service_check_privilege(int function_name,
 
 	cookie = (const char *)&g_array_index(in_param5, char, 0);
 
-	retv_if(cookie == NULL, TRUE);
+	retv_if(cookie == NULL, FALSE);
 
 	if (service_type == BT_OBEX_SERVICE) {
 		ret_val = security_server_check_privilege_by_cookie(cookie,

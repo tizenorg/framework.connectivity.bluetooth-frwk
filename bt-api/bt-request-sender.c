@@ -366,6 +366,7 @@ int _bt_send_request_async(int service_type, int service_function,
 			void *callback, void *user_data)
 {
 	GArray* in_param5 = NULL;
+	char *cookie;
 	bt_req_info_t *cb_data;
 	DBusGProxy *proxy;
 	DBusGProxyCall *proxy_call;
@@ -385,6 +386,13 @@ int _bt_send_request_async(int service_type, int service_function,
 		dbus_g_proxy_set_default_timeout(proxy, BT_DBUS_TIMEOUT_MAX);
 
 		in_param5 = g_array_new(FALSE, FALSE, sizeof(gchar));
+
+		cookie = _bt_get_cookie();
+
+		if (cookie) {
+			g_array_append_vals(in_param5, cookie,
+					_bt_get_cookie_size());
+		}
 
 		proxy_call = org_projectx_bt_service_request_async(proxy, service_type,
                         service_function, BT_ASYNC_REQ, in_param1, in_param2,
