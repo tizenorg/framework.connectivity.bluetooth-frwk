@@ -89,6 +89,8 @@ mkdir -p %{buildroot}%{_libdir}/systemd/user/tizen-middleware.target.wants
 install -m 0644 bt-service/bluetooth-frwk-service.service %{buildroot}%{_libdir}/systemd/user/
 ln -s ../bluetooth-frwk-service.service %{buildroot}%{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk-service.service
 
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE.APLv2 %{buildroot}/usr/share/license/%{name}
 
 %post
 vconftool set -tf int db/bluetooth/status "0" -g 6520
@@ -102,6 +104,7 @@ vconftool set -tf int memory/bluetooth/btsco "0" -g 6520 -i
 %files
 %defattr(-, root, root)
 %{_libdir}/libbluetooth-api.so.*
+/usr/share/license/%{name}
 
 %files devel
 %defattr(-, root, root)
