@@ -5,6 +5,7 @@ Release:    1
 Group:      TO_BE/FILLED_IN
 License:    Apache License, Version 2.0
 Source0:    %{name}-%{version}.tar.gz
+Source1:    bluetooth-frwk.service
 Requires: sys-assert
 Requires: dbus
 Requires: syspopup
@@ -12,6 +13,7 @@ BuildRequires:  pkgconfig(aul)
 BuildRequires:  pkgconfig(dbus-glib-1)
 BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(syspopup-caller)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires:  pkgconfig(libxml-2.0)
@@ -23,6 +25,9 @@ BuildRequires:  pkgconfig(status)
 BuildRequires:  pkgconfig(alarm-service)
 BuildRequires:  pkgconfig(notification)
 BuildRequires:  pkgconfig(security-server)
+BuildRequires:  pkgconfig(libsystemd-daemon)
+BuildRequires:  pkgconfig(capi-content-mime-type)
+BuildRequires:  python-xml
 BuildRequires:  cmake
 
 Requires(post): vconf
@@ -65,13 +70,13 @@ This package is Bluetooth core daemon to manage activation / deactivation.
 %build
 
 %ifarch x86_64
-export CFLAGS+="   -Wall -g -fvisibility=hidden -fPIC"
+export CFLAGS+="   -Wall -g -fvisibility=hidden -fPIC -D__ENABLE_GDBUS__"
 export LDFLAGS+=" -Wl,--rpath=%{_libdir} -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs" 
 %else
-export CFLAGS+=" -fpie"
+export CFLAGS+=" -fpie -D__ENABLE_GDBUS__"
 export LDFLAGS+=" -Wl,--rpath=%{_libdir} -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs -pie"
 %endif
-%cmake .
+cmake . -DCMAKE_INSTALL_PREFIX=/usr
 
 make
 
@@ -79,15 +84,10 @@ make
 rm -rf %{buildroot}
 %make_install
 
-mkdir -p %{buildroot}%{_sysconfdir}/rc.d/rc3.d/
-mkdir -p %{buildroot}%{_sysconfdir}/rc.d/rc5.d/
-ln -s %{_sysconfdir}/rc.d/init.d/bluetooth-frwk-service %{buildroot}%{_sysconfdir}/rc.d/rc3.d/S80bluetooth-frwk-service
-ln -s %{_sysconfdir}/rc.d/init.d/bluetooth-frwk-service %{buildroot}%{_sysconfdir}/rc.d/rc5.d/S80bluetooth-frwk-service
-
 mkdir -p %{buildroot}%{_libdir}/systemd/user
 mkdir -p %{buildroot}%{_libdir}/systemd/user/tizen-middleware.target.wants
-install -m 0644 bt-service/bluetooth-frwk-service.service %{buildroot}%{_libdir}/systemd/user/
-ln -s ../bluetooth-frwk-service.service %{buildroot}%{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk-service.service
+install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/user/bluetooth-frwk.service
+ln -s ../bluetooth-frwk.service %{buildroot}%{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk.service
 
 mkdir -p %{buildroot}/usr/share/license
 cp LICENSE.APLv2 %{buildroot}/usr/share/license/%{name}
@@ -95,6 +95,8 @@ cp LICENSE.APLv2 %{buildroot}/usr/share/license/%{name}
 %post
 vconftool set -tf int db/bluetooth/status "0" -g 6520
 vconftool set -tf int file/private/bt-service/flight_mode_deactivated "0" -g 6520 -i
+vconftool set -tf int file/private/bt-service/powersaving_mode_deactivated "0" -g 6520 -i
+vconftool set -tf int file/private/bt-service/bt_off_due_to_timeout "0" -g 6520 -i
 vconftool set -tf string memory/bluetooth/sco_headset_name "" -g 6520 -i
 vconftool set -tf int memory/bluetooth/device "0" -g 6520 -i
 vconftool set -tf int memory/bluetooth/btsco "0" -g 6520 -i
@@ -120,12 +122,10 @@ vconftool set -tf int memory/bluetooth/btsco "0" -g 6520 -i
 %manifest bluetooth-frwk.manifest
 %defattr(-, root, root)
 %{_sysconfdir}/rc.d/init.d/bluetooth-frwk-service
-%{_sysconfdir}/rc.d/rc3.d/S80bluetooth-frwk-service
-%{_sysconfdir}/rc.d/rc5.d/S80bluetooth-frwk-service
 %{_datadir}/dbus-1/services/org.projectx.bt.service
 %{_bindir}/bt-service
-%{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk-service.service
-%{_libdir}/systemd/user/bluetooth-frwk-service.service
+%{_libdir}/systemd/user/tizen-middleware.target.wants/bluetooth-frwk.service
+%{_libdir}/systemd/user/bluetooth-frwk.service
 /etc/smack/accesses.d/bluetooth-frwk-service.rule
 %attr(0666,-,-) /opt/var/lib/bluetooth/auto-pair-blacklist
 

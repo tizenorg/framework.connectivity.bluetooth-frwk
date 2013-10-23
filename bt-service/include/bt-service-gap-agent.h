@@ -109,6 +109,8 @@ gchar* _gap_agent_get_path(GapAgent *agent);
 
 gboolean _gap_agent_is_canceled(GapAgent *agent);
 
+void _gap_agent_set_canceled(GapAgent *agent, gboolean value);
+
 gboolean _gap_agent_register_osp_server(GapAgent *agent,
 						const gint type,
 						const char *uuid);

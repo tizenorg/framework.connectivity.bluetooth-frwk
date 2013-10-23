@@ -46,7 +46,7 @@ BT_EXPORT_API int bluetooth_opc_init(void)
 	bt_user_info_t *user_info;
 
 	user_info = _bt_get_user_data(BT_COMMON);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	return _bt_register_event(BT_OPP_CLIENT_EVENT, user_info->cb, user_info->user_data);
 }
@@ -73,11 +73,11 @@ BT_EXPORT_API int bluetooth_opc_push_files(bluetooth_device_address_t *remote_ad
 	__bt_get_file_size(file_name_array, &size, &file_count);
 	retv_if(file_count == 0, BLUETOOTH_ERROR_INVALID_PARAM);
 
+	user_info = _bt_get_user_data(BT_COMMON);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_COMMON);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 

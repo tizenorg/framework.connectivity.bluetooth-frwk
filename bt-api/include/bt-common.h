@@ -26,6 +26,8 @@
 #include <dbus/dbus-glib.h>
 #include <dbus/dbus.h>
 #include <dlog.h>
+#include <glib.h>
+#include <gio/gio.h>
 
 #include "bluetooth-api.h"
 
@@ -44,6 +46,17 @@ extern "C" {
         SLOGD(fmt, ##args)
 #define BT_ERR(fmt, args...) \
         SLOGE(fmt, ##args)
+
+#define DBG_SECURE(fmt, args...) SECURE_SLOGD(fmt, ##args)
+#define ERR_SECURE(fmt, args...) SECURE_SLOGE(fmt, ##args)
+
+#ifdef FUNCTION_TRACE
+#define	FN_START BT_DBG("[ENTER FUNC]")
+#define	FN_END BT_DBG("[EXIT FUNC]")
+#else
+#define	FN_START
+#define	FN_END
+#endif
 
 #define ret_if(expr) \
 	do { \
@@ -84,10 +97,10 @@ extern "C" {
 
 #define BT_ALLOC_PARAMS(IP1,IP2,IP3,IP4,OP ) \
 	do { \
-	        IP1 = g_array_new(FALSE, FALSE, sizeof(gchar));	\
-	        IP2 = g_array_new(FALSE, FALSE, sizeof(gchar));	\
-	        IP3 = g_array_new(FALSE, FALSE, sizeof(gchar));	\
-	        IP4 = g_array_new(FALSE, FALSE, sizeof(gchar)); \
+	        IP1 = g_array_new(TRUE, TRUE, sizeof(gchar));	\
+	        IP2 = g_array_new(TRUE, TRUE, sizeof(gchar));	\
+	        IP3 = g_array_new(TRUE, TRUE, sizeof(gchar));	\
+	        IP4 = g_array_new(TRUE, TRUE, sizeof(gchar)); \
 	} while (0)
 
 #define BT_INIT_AGENT_PARAMS() \
@@ -214,7 +227,11 @@ void _bt_convert_addr_type_to_string(char *address,
 
 int _bt_copy_utf8_string(char *dest, const char *src, unsigned int length);
 
+gboolean _bt_utf8_validate(char *name);
+
 int _bt_get_adapter_path(DBusGConnection *conn, char *path);
+
+int _bt_get_adapter_path_dbus(DBusConnection *conn, char *path);
 
 DBusGProxy *_bt_get_adapter_proxy(DBusGConnection *conn);
 
@@ -226,9 +243,18 @@ DBusGConnection *_bt_get_system_gconn(void);
 
 DBusConnection *_bt_get_system_conn(void);
 
+GDBusConnection *_bt_init_system_gdbus_conn(void);
+
 char *_bt_get_cookie(void);
 
 int _bt_get_cookie_size(void);
+#ifdef __ENABLE_GDBUS__
+GDBusConnection *_bt_gdbus_get_system_gconn(void);
+
+int _bt_gdbus_get_adapter_path(GDBusConnection *conn, char *path);
+
+GDBusProxy *_bt_gdbus_get_adapter_proxy(GDBusConnection *conn);
+#endif
 
 #ifdef __cplusplus
 }

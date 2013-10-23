@@ -38,17 +38,29 @@ typedef struct {
 
 void _bt_deinit_proxys(void);
 
-int _bt_send_request(int service_type, int service_function,
+int _bt_sync_send_request(int service_type, int service_function,
 			GArray *in_param1, GArray *in_param2,
 			GArray *in_param3, GArray *in_param4,
 			GArray **out_param1);
 
+#define _bt_send_request(a, b, format ...) ( \
+	{ \
+	BT_DBG("Sync Request => type=%s, fn=%s(0x%x)", #a, #b, b); \
+	_bt_sync_send_request(a, b, format); \
+	} \
+	)
 
-int _bt_send_request_async(int service_type, int service_function,
+int _bt_async_send_request(int service_type, int service_function,
 			GArray *in_param1, GArray *in_param2,
 			GArray *in_param3, GArray *in_param4,
 			void *callback, void *user_data);
 
+#define _bt_send_request_async(a, b, format ...) ( \
+	{ \
+	BT_DBG("Async Request => type=%s, fn=%s(0x%x)", #a, #b, b); \
+	_bt_async_send_request(a, b, format); \
+	} \
+	)
 
 #ifdef __cplusplus
 }

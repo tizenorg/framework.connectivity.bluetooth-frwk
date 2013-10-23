@@ -22,6 +22,7 @@
 #include <glib.h>
 #include <dlog.h>
 #include <string.h>
+#include <mime_type.h>
 
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
@@ -31,6 +32,28 @@
 #include "bt-service-util.h"
 #include "bt-service-opp-client.h"
 #include "bt-service-obex-agent.h"
+
+#define DBUS_STRUCT_STRING_STRING (dbus_g_type_get_struct("GValueArray", \
+		G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INVALID))
+
+static void __data_list_ptr_array_add(GPtrArray *ptr_array,
+					const gchar *name, const gchar *type)
+{
+	GValue value = { 0, };
+
+	g_value_init(&value, DBUS_STRUCT_STRING_STRING);
+	g_value_take_boxed(&value,
+			dbus_g_type_specialized_construct(
+						DBUS_STRUCT_STRING_STRING));
+
+	dbus_g_type_struct_set(&value,
+				0, g_strdup(name),
+				1, g_strdup(type),
+				G_MAXUINT);
+
+	g_ptr_array_add(ptr_array, g_value_get_boxed(&value));
+}
+
 
 static BtObexAgent *opc_obex_agent = NULL;
 static GSList *transfer_list = NULL;
@@ -60,7 +83,7 @@ static gboolean __bt_error_callback(DBusGMethodInvocation *context,
 
 
 static int __bt_opp_client_start_sending(int request_id, char *address,
-					char **file_name_array);
+					char **file_name_array, int file_count);
 
 static int __bt_opp_client_agent_init(void)
 {
@@ -161,8 +184,8 @@ static gboolean __bt_cancel_push_cb(gpointer data)
 		transfer_list = g_slist_remove(transfer_list, node);
 
 		if (__bt_opp_client_start_sending(node->request_id,
-				node->address,
-				node->file_path) != BLUETOOTH_ERROR_NONE) {
+				node->address, node->file_path,
+				node->file_count) != BLUETOOTH_ERROR_NONE) {
 			BT_DBG("Fail to start sending");
 		}
 	}
@@ -358,8 +381,8 @@ static gboolean __bt_release_callback(DBusGMethodInvocation *context,
 		transfer_list = g_slist_remove(transfer_list, data);
 
 		if (__bt_opp_client_start_sending(data->request_id,
-				data->address,
-				data->file_path) != BLUETOOTH_ERROR_NONE) {
+				data->address, data->file_path,
+				data->file_count) != BLUETOOTH_ERROR_NONE) {
 			goto fail;
 		}
 	}
@@ -441,18 +464,69 @@ static void __bt_send_files_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	if (result != BLUETOOTH_ERROR_NONE) {
 		__bt_free_sending_info(sending_info);
 		sending_info = NULL;
+
+		/* Operate remain works */
+		if (g_slist_length(transfer_list) > 0) {
+			bt_sending_data_t *data = NULL;
+
+			data = transfer_list->data;
+			if (data == NULL)
+				goto fail;
+
+			transfer_list = g_slist_remove(transfer_list, data);
+
+			if (__bt_opp_client_start_sending(data->request_id,
+					data->address, data->file_path,
+					data->file_count) != BLUETOOTH_ERROR_NONE) {
+				goto fail;
+			}
+		}
+
 	}
+	return;
+
+fail:
+	g_slist_free_full(transfer_list,
+			(GDestroyNotify)__bt_free_sending_data);
+	transfer_list = NULL;
+}
+
+static void __bluetooth_ptr_array_free(gpointer data)
+{
+	GValue value = { 0, };
+
+	gchar *name = NULL;
+	gchar *type = NULL;
+
+	if(data == NULL)
+		return;
+
+	g_value_init(&value, DBUS_STRUCT_STRING_STRING);
+	g_value_set_boxed(&value, data);
+
+	dbus_g_type_struct_get(&value,
+			0, &name,
+			1, &type,
+			G_MAXUINT);
+
+	g_free(name);
+	g_free(type);
 }
 
 static int __bt_opp_client_start_sending(int request_id, char *address,
-					char **file_name_array)
+					char **file_name_array, int file_count)
 {
 	GHashTable *hash;
 	GValue *value;
+	GPtrArray *ptr_array;
 	DBusGConnection *g_conn;
 	DBusGProxy *client_proxy;
 	DBusGProxyCall *proxy_call;
 	char *agent_path;
+	char *ext;
+	char *mime_type = NULL;
+	int i;
+	int result = MIME_TYPE_ERROR_NONE;
 
 	BT_CHECK_PARAMETER(address, return);
 	BT_CHECK_PARAMETER(file_name_array, return);
@@ -485,13 +559,33 @@ static int __bt_opp_client_start_sending(int request_id, char *address,
 
 	agent_path = g_strdup(BT_OBEX_CLIENT_AGENT_PATH);
 
+	ptr_array = g_ptr_array_new_with_free_func(__bluetooth_ptr_array_free);
+
+	for (i = 0; i < file_count; i++) {
+		ext = strchr(file_name_array[i], '.');
+		if (ext != NULL) {
+			result = mime_type_get_mime_type(ext + 1, &mime_type);
+			if (result != MIME_TYPE_ERROR_NONE)
+				BT_ERR("mime_type_get_mime_type failed %d", result);
+		}
+
+		__data_list_ptr_array_add(ptr_array, file_name_array[i],
+								mime_type);
+
+		if (mime_type) {
+			free(mime_type);
+			mime_type = NULL;
+		}
+	}
+
 	proxy_call = dbus_g_proxy_begin_call(client_proxy, "SendFiles",
-				__bt_send_files_cb, NULL, NULL,
-				dbus_g_type_get_map("GHashTable", G_TYPE_STRING,
-						    G_TYPE_VALUE), hash,
-				G_TYPE_STRV, file_name_array,
-				DBUS_TYPE_G_OBJECT_PATH, agent_path,
-				G_TYPE_INVALID);
+			__bt_send_files_cb, NULL, NULL,
+			dbus_g_type_get_map("GHashTable", G_TYPE_STRING,
+					    G_TYPE_VALUE), hash,
+			dbus_g_type_get_collection("GPtrArray",
+					DBUS_STRUCT_STRING_STRING), ptr_array,
+			DBUS_TYPE_G_OBJECT_PATH, agent_path,
+			G_TYPE_INVALID);
 
 	g_free(agent_path);
 
@@ -508,17 +602,19 @@ static int __bt_opp_client_start_sending(int request_id, char *address,
 	sending_info->sending_proxy = proxy_call;
 	g_hash_table_destroy(hash);
 
+	if (ptr_array)
+		g_ptr_array_free(ptr_array, TRUE);
+
 	return BLUETOOTH_ERROR_NONE;
 }
 
 int _bt_opp_client_push_files(int request_id, DBusGMethodInvocation *context,
 				bluetooth_device_address_t *remote_address,
-				char **file_path, int file_count)
+				char **file_path, int file_count,
+				GArray **out_param)
 {
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_sending_data_t *data;
-	GArray *out_param1 = NULL;
-	GArray *out_param2 = NULL;
 	int result = BLUETOOTH_ERROR_NONE;
 	int i;
 
@@ -530,7 +626,9 @@ int _bt_opp_client_push_files(int request_id, DBusGMethodInvocation *context,
 
 	if (sending_info == NULL) {
 		result = __bt_opp_client_start_sending(request_id,
-						address, file_path);
+						address, file_path, file_count);
+		if (result != BLUETOOTH_ERROR_NONE)
+			return result;
 	} else {
 		/* Insert data in the queue */
 		data = g_malloc0(sizeof(bt_sending_data_t));
@@ -541,23 +639,14 @@ int _bt_opp_client_push_files(int request_id, DBusGMethodInvocation *context,
 
 		for (i = 0; i < file_count; i++) {
 			data->file_path[i] = g_strdup(file_path[i]);
-			BT_DBG("file[%d]: %s", i, data->file_path[i]);
+			DBG_SECURE("file[%d]: %s", i, data->file_path[i]);
 		}
 
 		transfer_list = g_slist_append(transfer_list, data);
 	}
 
-	out_param1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param2 = g_array_new(FALSE, FALSE, sizeof(gchar));
-
-	g_array_append_vals(out_param1, &request_id,
+	g_array_append_vals(*out_param, &request_id,
 				sizeof(int));
-	g_array_append_vals(out_param2, &result, sizeof(int));
-
-	dbus_g_method_return(context, out_param1, out_param2);
-
-	g_array_free(out_param1, TRUE);
-	g_array_free(out_param2, TRUE);
 
 	return result;
 }
@@ -573,8 +662,7 @@ int _bt_opp_client_cancel_push(void)
 
 	if (sending_info->transfer_info) {
 		dbus_g_proxy_call_no_reply(sending_info->transfer_info->proxy,
-					"Cancel", G_TYPE_INVALID,
-					G_TYPE_INVALID);
+					"Cancel", G_TYPE_INVALID);
 	} else {
 		retv_if(sending_info->sending_proxy == NULL,
 					BLUETOOTH_ERROR_INTERNAL);

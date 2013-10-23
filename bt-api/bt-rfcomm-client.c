@@ -38,15 +38,17 @@ BT_EXPORT_API int bluetooth_rfcomm_connect(const bluetooth_device_address_t *rem
 	BT_CHECK_PARAMETER(remote_uuid, return);
 	BT_CHECK_ENABLED(return);
 
-	BT_INIT_PARAMS();
-	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+	
 
 	user_info = _bt_get_user_data(BT_COMMON);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	/* connect_type:  BT_RFCOMM_UUID / BT_RFCOMM_CHANNEL*/
 	/* In now, we only support to connecty using UUID */
 	connect_type = BT_RFCOMM_UUID;
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
 	g_array_append_vals(in_param1, remote_bt_address,
 				sizeof(bluetooth_device_address_t));

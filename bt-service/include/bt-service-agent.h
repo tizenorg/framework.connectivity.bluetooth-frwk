@@ -115,6 +115,7 @@ void* _bt_create_agent(const char *path, gboolean adapter);
 void _bt_destroy_agent(void *agent);
 
 gboolean _bt_agent_is_canceled(void *agent);
+void _bt_agent_set_canceled(void *agent, gboolean value);
 
 gboolean _bt_agent_register_osp_server(const gint type, const char *uuid);
 

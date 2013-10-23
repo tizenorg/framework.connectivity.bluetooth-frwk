@@ -17,6 +17,7 @@
  *
  */
 
+
 #ifndef _BT_SERVICE_DEVICE_H_
 #define _BT_SERVICE_DEVICE_H_
 
@@ -57,6 +58,14 @@ gboolean _bt_is_device_creating(void);
 void _bt_set_autopair_status_in_bonding_info(gboolean is_autopair);
 
 bt_remote_dev_info_t *_bt_get_remote_device_info(char *address);
+
+gboolean _bt_is_bonding_device_address(const char *address);
+
+int _bt_connect_le_device(const bluetooth_device_address_t *bd_addr);
+
+int _bt_disconnect_le_device(const bluetooth_device_address_t *bd_addr);
+
+int _bt_read_rssi_value(const bluetooth_device_address_t *bd_addr);
 
 #ifdef __cplusplus
 }

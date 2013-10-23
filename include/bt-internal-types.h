@@ -17,6 +17,7 @@
  *
  */
 
+
 #ifndef _BT_INTERNAL_TYPES_H_
 #define _BT_INTERNAL_TYPES_H_
 
@@ -74,7 +75,7 @@ typedef enum {
 #define BT_DBUS_TIMEOUT_MAX 50000
 #define BT_SERVER_ACCEPT_TIMEOUT 2000 /* 2 seconds */
 #define BT_FILE_PATH_MAX 256
-#define BT_NAME_MAX 256
+#define BT_META_DATA_MAX_LEN 512
 
 #define BT_HFP_AUDIO_GATEWAY_UUID "0000111f-0000-1000-8000-00805f9b34fb"
 #define BT_A2DP_UUID "0000110D-0000-1000-8000-00805F9B34FB"
@@ -111,6 +112,7 @@ typedef enum {
 	BT_GET_DISCOVERABLE_MODE,
 	BT_SET_DISCOVERABLE_MODE,
 	BT_START_DISCOVERY,
+	BT_START_CUSTOM_DISCOVERY,
 	BT_CANCEL_DISCOVERY,
 	BT_IS_DISCOVERYING,
 	BT_GET_BONDED_DEVICES,
@@ -130,6 +132,7 @@ typedef enum {
 	BT_NETWORK_DEACTIVATE,
 	BT_NETWORK_CONNECT,
 	BT_NETWORK_DISCONNECT,
+	BT_NETWORK_SERVER_DISCONNECT,
 	BT_AUDIO_CONNECT = BT_FUNC_AUDIO_BASE,
 	BT_AUDIO_DISCONNECT,
 	BT_AG_CONNECT,
@@ -170,14 +173,16 @@ typedef enum {
 	BT_RFCOMM_IS_UUID_AVAILABLE,
 	BT_RFCOMM_ACCEPT_CONNECTION,
 	BT_RFCOMM_REJECT_CONNECTION,
-
+	BT_CONNECT_LE,
+	BT_DISCONNECT_LE,
+	BT_READ_RSSI,
 } bt_function_t;
 
 typedef struct {
-	char title[BT_NAME_MAX];
-	char artist[BT_NAME_MAX];
-	char album[BT_NAME_MAX];
-	char genre[BT_NAME_MAX];
+	char title[BT_META_DATA_MAX_LEN];
+	char artist[BT_META_DATA_MAX_LEN];
+	char album[BT_META_DATA_MAX_LEN];
+	char genre[BT_META_DATA_MAX_LEN];
 	unsigned int total_tracks;
 	unsigned int number;
 	unsigned int duration;
@@ -188,18 +193,11 @@ typedef struct {
 /* Need to convert the design ID */
 #define BT_STR_NOT_SUPPORT "Not support"
 
-#ifndef __TIZEN_OPEN__
-#define BT_MDM_LIMITED_VISIBLE_TIMEOUT 120
-
-#define BT_STR_DISABLED_RESTRICTS \
-	dgettext(BT_COMMON_PKG, "IDS_BT_BODY_SECURITY_POLICY_RESTRICTS_USE_OF_BLUETOOTH_CONNECTION")
-
-#define BT_STR_HANDS_FREE_RESTRICTS \
-	dgettext(BT_COMMON_PKG, "IDS_BT_BODY_SECURITY_POLICY_RESTRICTS_USE_OF_BLUETOOTH_CONNECTION_TO_HANDS_FREE_FEATURES_ONLY")
-#endif
-
 #define BT_FILE_VISIBLE_TIME "file/private/libug-setting-bluetooth-efl/visibility_time"
 #define BT_OFF_DUE_TO_FLIGHT_MODE "file/private/bt-service/flight_mode_deactivated"
+#define BT_OFF_DUE_TO_POWER_SAVING_MODE \
+	"file/private/bt-service/powersaving_mode_deactivated"
+#define BT_OFF_DUE_TO_TIMEOUT "file/private/bt-service/bt_off_due_to_timeout"
 
 #define BT_EVENT_SERVICE "org.projectx.bt_event"
 
@@ -244,6 +242,8 @@ typedef struct {
 #define BT_NETWORK_SERVER_DISCONNECTED "NetworkServerDisconnected"
 #define BT_OPP_CONNECTED "OppConnected"
 #define BT_OPP_DISCONNECTED "OppDisconnected"
+#define BT_TRANSFER_CONNECTED "TransferConnected"
+#define BT_TRANSFER_DISCONNECTED "TransferDisonnected"
 #define BT_TRANSFER_STARTED "TransferStarted"
 #define BT_TRANSFER_PROGRESS "TransferProgress"
 #define BT_TRANSFER_COMPLETED "TransferCompleted"
@@ -257,6 +257,10 @@ typedef struct {
 #define BT_MEDIA_EQUALIZER_STATUS "MediaEqualizerStatus"
 #define BT_MEDIA_REPEAT_STATUS "MediaRepeatStatus"
 #define BT_MEDIA_SCAN_STATUS "MediaScanStatus"
+#define BT_NAME_OWNER_CHANGED "NameOwnerChanged"
+#define BT_GATT_CONNECTED "GattConnected"
+#define BT_GATT_DISCONNECTED "GattDisconnected"
+#define BT_GATT_RSSI "RSSI"
 
 #ifdef __cplusplus
 }

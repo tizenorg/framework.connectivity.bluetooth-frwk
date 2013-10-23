@@ -69,7 +69,7 @@ static int __bt_rfcomm_open_socket(char *dev_node)
 	socket_fd = open(dev_node, O_RDWR | O_NOCTTY);
 
 	if (socket_fd < 0) {
-		BT_ERR("\nCan't open TTY : %s(%d)");
+		BT_ERR("Can't open TTY : %s(%d)", dev_node, socket_fd);
 		return socket_fd;
 	}
 
@@ -323,8 +323,17 @@ static void __bt_rfcomm_connected_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	socket_fd = __bt_rfcomm_open_socket(rfcomm_device_node);
 
 	if (socket_fd < 0) {
-		BT_ERR("Fail to open socket: %d", socket_fd);
-		goto dbus_return;
+		int retry_count = 10;
+		do {
+			BT_ERR("Fail to open socket[%d] retry_count[%d]", socket_fd, retry_count);
+			usleep(10*1000);		/* 10 ms */
+			socket_fd = __bt_rfcomm_open_socket(rfcomm_device_node);
+		} while (socket_fd < 0 && retry_count-- > 0);
+
+		if (socket_fd < 0) {
+			BT_ERR("Fail to open socket: %d", socket_fd);
+			goto dbus_return;
+		}
 	}
 
 	client_info = g_malloc0(sizeof(bt_rfcomm_info_t));
@@ -334,6 +343,7 @@ static void __bt_rfcomm_connected_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	client_info->address = g_strdup(rfcomm_info->address);
 	client_info->uuid = g_strdup(rfcomm_info->uuid);
 	client_info->io_channel = g_io_channel_unix_new(socket_fd);
+	g_io_channel_set_encoding(client_info->io_channel, NULL, NULL);
 	client_info->io_event = g_io_add_watch(client_info->io_channel,
 				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
 				__bt_rfcomm_client_data_received_cb,
@@ -635,27 +645,12 @@ int _bt_rfcomm_write(int socket_fd, char *buf, int length)
 {
 	int wbytes = 0;
 	int written;
-	int new_length;
-	char *ptr = NULL;
 
 	retv_if(buf == NULL, BLUETOOTH_ERROR_INVALID_PARAM);
 
-	/* Check the utf8 validation & Fill the NULL in the invalid location*/
-	if (!g_utf8_validate(buf, -1, (const char **)&ptr))
-		*ptr = '\0';
-
-	/* After calling g_utf8_validate, it is possible to be NULL */
-	retv_if(buf == NULL, BLUETOOTH_ERROR_INVALID_PARAM);
-
-	new_length = strlen(buf);
-	if (new_length < length) {
-		length = new_length;
-	}
-
-	/*some times user may send huge data */
+	/* Some times user may send huge data */
 	while (wbytes < length) {
-		written = write(socket_fd, buf + wbytes,
-				length - wbytes);
+		written = write(socket_fd, buf + wbytes, length - wbytes);
 		if (written <= 0) {
 			BT_ERR("write failed..\n");
 			return BLUETOOTH_ERROR_NOT_IN_OPERATION;

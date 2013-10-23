@@ -48,19 +48,19 @@
 DBusGConnection *bt_service_conn;
 BtService *service_object;
 
-GType bt_service_get_type (void);
+GType bt_service_get_type(void);
 
 G_DEFINE_TYPE(BtService, bt_service, G_TYPE_OBJECT);
 
 /*This is part of platform provided code skeleton for client server model*/
-static void bt_service_class_init (BtServiceClass *service_class)
+static void bt_service_class_init(BtServiceClass *service_class)
 {
 	dbus_g_object_type_install_info(G_TYPE_FROM_CLASS(service_class),
 					&dbus_glib_bt_object_info);
 }
 
 /*This is part of platform provided code skeleton for client server model*/
-static void bt_service_init (BtService *service)
+static void bt_service_init(BtService *service)
 {
 }
 
@@ -164,8 +164,15 @@ static int __bt_bluez_request(int function_name,
 	}
 	case BT_START_DISCOVERY:
 		result = _bt_start_discovery();
-		break;
 
+		break;
+	case BT_START_CUSTOM_DISCOVERY: {
+		bt_discovery_role_type_t role;
+		role = g_array_index(in_param1, bt_discovery_role_type_t, 0);
+
+		result = _bt_start_custom_discovery(role);
+		break;
+	}
 	case BT_CANCEL_DISCOVERY:
 		result = _bt_cancel_discovery();
 		break;
@@ -341,6 +348,20 @@ static int __bt_bluez_request(int function_name,
 		}
 		break;
 	}
+	case BT_NETWORK_SERVER_DISCONNECT: {
+		bluetooth_device_address_t address = { {0} };
+
+		address = g_array_index(in_param1,
+				bluetooth_device_address_t, 0);
+
+		result = _bt_network_server_disconnect(request_id, &address);
+		if (result != BLUETOOTH_ERROR_NONE) {
+			g_array_append_vals(*out_param1, &address,
+					sizeof(bluetooth_device_address_t));
+		}
+		break;
+	}
+
 	case BT_AUDIO_CONNECT: {
 		bluetooth_device_address_t address = { {0} };
 
@@ -629,6 +650,36 @@ static int __bt_bluez_request(int function_name,
 		result = _bt_rfcomm_reject_connection(socket_fd);
 		break;
 	}
+	case BT_CONNECT_LE: {
+		bluetooth_device_address_t address = { {0} };
+
+		address = g_array_index(in_param1,
+				bluetooth_device_address_t, 0);
+
+		result = _bt_connect_le_device(&address);
+
+		break;
+	}
+	case BT_DISCONNECT_LE: {
+		bluetooth_device_address_t address = { {0} };
+
+		address = g_array_index(in_param1,
+				bluetooth_device_address_t, 0);
+
+		result = _bt_disconnect_le_device(&address);
+
+		break;
+	}
+	case BT_READ_RSSI: {
+		bluetooth_device_address_t address = { {0} };
+
+		address = g_array_index(in_param1,
+				bluetooth_device_address_t, 0);
+
+		result = _bt_read_rssi_value(&address);
+
+		break;
+	}
 	default:
 		result = BLUETOOTH_ERROR_INTERNAL;
 		break;
@@ -673,7 +724,7 @@ static int __bt_obexd_request(int function_name,
 
 		result = _bt_opp_client_push_files(request_id, context,
 						&address, file_path,
-						file_count);
+						file_count, out_param1);
 
 		for (i = 0; i < file_count; i++) {
 			g_free(file_path[i]);
@@ -854,6 +905,7 @@ gboolean __bt_service_check_privilege(int function_name,
 		}
 		break;
 	case BT_START_DISCOVERY:
+	case BT_START_CUSTOM_DISCOVERY:
 	case BT_CANCEL_DISCOVERY:
 	case BT_BOND_DEVICE:
 	case BT_CANCEL_BONDING:
@@ -918,8 +970,10 @@ gboolean __bt_service_check_privilege(int function_name,
 	case BT_AVRCP_SET_PROPERTIES:
 	case BT_RFCOMM_CLIENT_IS_CONNECTED:
 	case BT_RFCOMM_IS_UUID_AVAILABLE:
+	case BT_CONNECT_LE:
+	case BT_DISCONNECT_LE:
+	case BT_READ_RSSI:
 		/* Non-privilege control */
-		BT_DBG("Non-privilege control");
 		break;
 	default:
 		BT_ERR("Unknown function!");
@@ -952,7 +1006,6 @@ gboolean bt_service_request(
 
 	if (__bt_service_check_privilege(service_function,
 				service_type, in_param5) == FALSE) {
-
 		/* Will return access error! */
 	}
 
@@ -993,9 +1046,10 @@ gboolean bt_service_request(
 
 	g_array_append_vals(out_param2, &result, sizeof(int));
 
-	if (request_type == BT_ASYNC_REQ
-	     || service_function == BT_OBEX_SERVER_ACCEPT_CONNECTION
-	      || service_function == BT_RFCOMM_ACCEPT_CONNECTION) {
+	if ((request_type == BT_ASYNC_REQ ||
+		service_function == BT_OBEX_SERVER_ACCEPT_CONNECTION ||
+		service_function == BT_RFCOMM_ACCEPT_CONNECTION) &&
+		service_function != BT_OPP_PUSH_FILES) {
 		_bt_insert_request_list(request_id, service_function,
 					NULL, context);
 	} else {
@@ -1025,7 +1079,7 @@ int _bt_service_register(void)
 	BtService *bt_service;
 	DBusGConnection *conn;
 	DBusGProxy *proxy;
-	GError* err = NULL;
+	GError *err = NULL;
 	guint result = 0;
 
 	conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, NULL);

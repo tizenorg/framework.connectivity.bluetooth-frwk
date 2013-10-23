@@ -347,7 +347,6 @@ int _bt_register_media_player(void)
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	DBusMessageIter property_dict;
-	DBusMessageIter metadata_dict;
 	DBusError err;
 	char *object;
 	char *adapter_path;
@@ -355,7 +354,6 @@ int _bt_register_media_player(void)
 	DBusGConnection *gconn;
 
 	media_player_settings_t player_settings = {0,};
-	media_metadata_attributes_t metadata = {0,};
 
 	player_settings.equalizer = EQUALIZER_OFF;
 	player_settings.repeat  = REPEAT_MODE_OFF;
@@ -363,14 +361,6 @@ int _bt_register_media_player(void)
 	player_settings.scan = SCAN_MODE_OFF;
 	player_settings.status = STATUS_STOPPED;
 	player_settings.position = 0;
-
-	metadata.title = "\0";
-	metadata.artist = "\0";
-	metadata.album = "\0";
-	metadata.genre = "\0";
-	metadata.total_tracks = 0;
-	metadata.number = 0;
-	metadata.duration = 0;
 
 	gconn = _bt_get_system_gconn();
 	retv_if(gconn  == NULL, BLUETOOTH_ERROR_INTERNAL);
@@ -439,42 +429,6 @@ int _bt_register_media_player(void)
 		DBUS_TYPE_UINT32, &player_settings.position);
 
 	dbus_message_iter_close_container(&iter, &property_dict);
-
-	dbus_message_iter_init_append(msg, &iter);
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-			DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-			DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
-			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &metadata_dict);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Title",
-		DBUS_TYPE_STRING, &metadata.title);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Artist",
-		DBUS_TYPE_STRING, &metadata.artist);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Album",
-		DBUS_TYPE_STRING, &metadata.album);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Genre",
-		DBUS_TYPE_STRING, &metadata.genre);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"NumberOfTracks",
-		DBUS_TYPE_UINT32, &metadata.total_tracks);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Number",
-		DBUS_TYPE_UINT32, &metadata.number);
-
-	__bt_media_append_dict_entry(&metadata_dict,
-		"Duration",
-		DBUS_TYPE_UINT32, &metadata.duration);
-
-	dbus_message_iter_close_container(&iter, &metadata_dict);
 
 	dbus_error_init(&err);
 	reply = dbus_connection_send_with_reply_and_block(conn,

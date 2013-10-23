@@ -62,7 +62,11 @@ BT_EXPORT_API int bluetooth_check_adapter(void)
 {
 	int ret;
 
+#ifdef __ENABLE_GDBUS__
+	ret = _bt_gdbus_get_adapter_path(_bt_gdbus_get_system_gconn(), NULL);
+#else
 	ret = _bt_get_adapter_path(_bt_get_system_gconn(), NULL);
+#endif
 
 	return ret == BLUETOOTH_ERROR_NONE ? BLUETOOTH_ADAPTER_ENABLED :
 						BLUETOOTH_ADAPTER_DISABLED;
@@ -72,11 +76,11 @@ BT_EXPORT_API int bluetooth_enable_adapter(void)
 {
 	int result;
 
-	BT_INIT_PARAMS();
-	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
 	retv_if(bluetooth_check_adapter() == BLUETOOTH_ADAPTER_ENABLED,
 				BLUETOOTH_ERROR_DEVICE_ALREADY_ENABLED);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_ENABLE_ADAPTER,
 		in_param1, in_param2, in_param3, in_param4, &out_param);
@@ -307,6 +311,27 @@ BT_EXPORT_API int bluetooth_start_discovery(unsigned short max_response,
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_START_DISCOVERY,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_start_custom_discovery(bt_discovery_role_type_t role,
+						unsigned short max_response,
+						unsigned short discovery_duration,
+						unsigned int classOfDeviceMask)
+{
+	int result;
+
+	BT_CHECK_ENABLED(return);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, &role, sizeof(bt_discovery_role_type_t));
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_START_CUSTOM_DISCOVERY,
 		in_param1, in_param2, in_param3, in_param4, &out_param);
 
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);

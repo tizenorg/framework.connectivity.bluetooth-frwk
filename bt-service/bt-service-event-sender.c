@@ -157,6 +157,12 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BLUETOOTH_EVENT_OPC_DISCONNECTED:
 		signal = BT_OPP_DISCONNECTED;
 		break;
+	case BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_CONNECTED:
+		signal = BT_TRANSFER_CONNECTED;
+		break;
+	case BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_DISCONNECTED:
+		signal = BT_TRANSFER_DISCONNECTED;
+		break;
 	case BLUETOOTH_EVENT_OPC_TRANSFER_STARTED:
 	case BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_STARTED:
 		signal = BT_TRANSFER_STARTED;
@@ -205,6 +211,15 @@ int _bt_send_event(int event_type, int event, int type, ...)
 		break;
 	case BLUETOOTH_EVENT_AVRCP_SETTING_SCAN_STATUS:
 		signal = BT_MEDIA_SCAN_STATUS;
+		break;
+	case BLUETOOTH_EVENT_GATT_CONNECTED:
+		signal = BT_GATT_CONNECTED;
+		break;
+	case BLUETOOTH_EVENT_GATT_DISCONNECTED:
+		signal = BT_GATT_DISCONNECTED;
+		break;
+	case BLUETOOTH_EVENT_GATT_RSSI:
+		signal = BT_GATT_RSSI;
 		break;
 	default:
 		BT_ERR("Unknown event");

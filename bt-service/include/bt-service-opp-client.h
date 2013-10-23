@@ -17,6 +17,7 @@
  *
  */
 
+
 #ifndef _BT_SERVICE_OPP_CLIENT_H_
 #define _BT_SERVICE_OPP_CLIENT_H_
 
@@ -60,7 +61,8 @@ typedef struct {
 
 int _bt_opp_client_push_files(int request_id, DBusGMethodInvocation *context,
 				bluetooth_device_address_t *remote_address,
-				char **file_path, int file_count);
+				char **file_path, int file_count,
+				GArray **out_param);
 
 int _bt_opp_client_cancel_push(void);
 

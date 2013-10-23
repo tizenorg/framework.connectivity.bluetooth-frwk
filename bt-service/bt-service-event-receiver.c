@@ -38,10 +38,32 @@
 #include "bt-service-rfcomm-server.h"
 #include "bt-service-audio.h"
 
+#ifndef VCONFKEY_BT_DEVICE_PAN_CONNECTED
+  #define VCONFKEY_BT_DEVICE_PAN_CONNECTED 0x0080
+#endif
+
+#ifndef VCONFKEY_BT_DEVICE_HID_CONNECTED
+  #define VCONFKEY_BT_DEVICE_HID_CONNECTED 0x0100
+#endif
+
 static DBusGConnection *manager_conn;
 static DBusGConnection *obexd_conn;
 
 static guint event_id;
+
+/**
+ * obexd connection type
+ */
+typedef enum {
+	OBEX_OPP = (1 << 1),
+	OBEX_FTP = (1 << 2),
+	OBEX_BIP = (1 << 3),
+	OBEX_PBAP = (1 << 4),
+	OBEX_IRMC = (1 << 5),
+	OBEX_PCSUITE = (1 << 6),
+	OBEX_SYNCEVOLUTION = 	(1 << 7),
+	OBEX_MAS = (1 << 8),
+} bluetooth_obex_connection_type_t;
 
 static gboolean __bt_parse_device_properties(DBusMessageIter *item_iter,
 						bt_remote_dev_info_t *dev_info)
@@ -91,6 +113,9 @@ static gboolean __bt_parse_device_properties(DBusMessageIter *item_iter,
 		} else if (strcasecmp(key, "RSSI") == 0) {
 			dbus_message_iter_get_basic(&iter_dict_val,
 						&dev_info->rssi);
+		} else if (strcasecmp(key, "DeviceType") == 0) {
+			dbus_message_iter_get_basic(&iter_dict_val,
+						&dev_info->device_type);
 		} else if (strcasecmp(key, "UUIDs") == 0) {
 			DBusMessageIter uuid_iter;
 			DBusMessageIter tmp_iter;
@@ -232,6 +257,24 @@ static int __bt_get_agent_signal_info(DBusMessage *msg, char **address,
 	dbus_message_iter_get_basic(&item_iter, uuid);
 
 	return BLUETOOTH_ERROR_NONE;
+}
+
+void __bt_set_device_values(gboolean connected, int state)
+{
+	int bt_device_state = VCONFKEY_BT_DEVICE_NONE;
+
+	if (vconf_get_int(VCONFKEY_BT_DEVICE, &bt_device_state) != 0) {
+		BT_ERR("vconf_get_str failed");
+	}
+
+	if (connected == TRUE)
+		bt_device_state |= state;
+	else if (bt_device_state & state)
+		bt_device_state ^= state;
+
+	if (vconf_set_int(VCONFKEY_BT_DEVICE, bt_device_state) != 0) {
+		BT_ERR("vconf_set_int failed");
+	}
 }
 
 gboolean _bt_discovery_finished_cb(gpointer user_data)
@@ -425,6 +468,7 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			DBUS_TYPE_BOOLEAN, &dev_info->paired,
 			DBUS_TYPE_BOOLEAN, &dev_info->connected,
 			DBUS_TYPE_BOOLEAN, &dev_info->trust,
+			DBUS_TYPE_BYTE, &dev_info->device_type,
 			DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
 			&dev_info->uuids, dev_info->uuid_count,
 			DBUS_TYPE_INVALID);
@@ -517,6 +561,9 @@ void _bt_handle_input_event(DBusMessage *msg)
 				BLUETOOTH_HID_CONNECTED :
 				BLUETOOTH_HID_DISCONNECTED;
 
+		__bt_set_device_values(property_flag,
+				VCONFKEY_BT_DEVICE_HID_CONNECTED);
+
 		_bt_send_event(BT_HID_EVENT, event,
 			DBUS_TYPE_INT32, &result,
 			DBUS_TYPE_STRING, &address,
@@ -544,6 +591,9 @@ void _bt_handle_network_server_event(DBusMessage *msg)
 			return;
 		}
 
+		__bt_set_device_values(TRUE,
+				VCONFKEY_BT_DEVICE_PAN_CONNECTED);
+
 		_bt_send_event(BT_NETWORK_EVENT, BLUETOOTH_EVENT_NETWORK_SERVER_CONNECTED,
 			DBUS_TYPE_INT32, &result,
 			DBUS_TYPE_STRING, &device,
@@ -557,6 +607,9 @@ void _bt_handle_network_server_event(DBusMessage *msg)
 			BT_ERR("Unexpected parameters in signal");
 			return;
 		}
+
+		__bt_set_device_values(FALSE,
+			VCONFKEY_BT_DEVICE_PAN_CONNECTED);
 
 		_bt_send_event(BT_NETWORK_EVENT, BLUETOOTH_EVENT_NETWORK_SERVER_DISCONNECTED,
 			DBUS_TYPE_INT32, &result,
@@ -608,6 +661,9 @@ void _bt_handle_network_client_event(DBusMessage *msg)
 			event = BLUETOOTH_EVENT_NETWORK_DISCONNECTED;
 		}
 
+		__bt_set_device_values(property_flag,
+				VCONFKEY_BT_DEVICE_PAN_CONNECTED);
+
 		_bt_send_event(BT_NETWORK_EVENT, event,
 			DBUS_TYPE_INT32, &result,
 			DBUS_TYPE_STRING, &address,
@@ -627,6 +683,7 @@ void _bt_handle_device_event(DBusMessage *msg)
 	const char *member = dbus_message_get_member(msg);
 	const char *path = dbus_message_get_path(msg);
 	const char *property = NULL;
+	short rssi;
 
 	ret_if(path == NULL);
 	ret_if(member == NULL);
@@ -644,7 +701,23 @@ void _bt_handle_device_event(DBusMessage *msg)
 
 		ret_if(property == NULL);
 
-		if (strcasecmp(property, "Connected") == 0) {
+		if (strcasecmp(property, "GattConnected") == 0) {
+			_bt_send_event(BT_DEVICE_EVENT,
+				BLUETOOTH_EVENT_GATT_CONNECTED,
+				0, DBUS_TYPE_INVALID);
+		} else if (strcasecmp(property, "GattDisconnected") == 0) {
+			_bt_send_event(BT_DEVICE_EVENT,
+				BLUETOOTH_EVENT_GATT_DISCONNECTED,
+				0, DBUS_TYPE_INVALID);
+		} else if (strcasecmp(property, "RSSI") == 0) {
+			dbus_message_iter_next(&item_iter);
+			dbus_message_iter_get_basic(&item_iter, &rssi);
+
+			_bt_send_event(BT_DEVICE_EVENT,
+				BLUETOOTH_EVENT_GATT_RSSI,
+				DBUS_TYPE_INT16, &rssi,
+				DBUS_TYPE_INVALID);
+		} else if (strcasecmp(property, "Connected") == 0) {
 			gboolean connected = FALSE;
 			dbus_message_iter_next(&item_iter);
 			dbus_message_iter_recurse(&item_iter, &value_iter);
@@ -710,9 +783,48 @@ void _bt_handle_device_event(DBusMessage *msg)
 				DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
 				DBUS_TYPE_BOOLEAN, &remote_dev_info->connected,
 				DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
+				DBUS_TYPE_BYTE, &remote_dev_info->device_type,
 				DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
 				&remote_dev_info->uuids, remote_dev_info->uuid_count,
 				DBUS_TYPE_INVALID);
+
+			_bt_free_device_info(remote_dev_info);
+			g_free(address);
+
+		} else if (strcasecmp(property, "UUIDs") == 0) {
+			/* Once we get the updated uuid information after
+			 * reverse service search, update it to application */
+
+			bt_remote_dev_info_t *remote_dev_info;
+
+			ret_if(_bt_is_device_creating() == TRUE);
+
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+
+			_bt_convert_device_path_to_address(path, address);
+
+			remote_dev_info = _bt_get_remote_device_info(address);
+			if (remote_dev_info == NULL) {
+				g_free(address);
+				return;
+			}
+
+			BT_DBG("UUID's count = %d", remote_dev_info->uuid_count);
+			if (remote_dev_info->paired && remote_dev_info->uuid_count)
+				_bt_send_event(BT_ADAPTER_EVENT,
+					BLUETOOTH_EVENT_SERVICE_SEARCHED,
+					DBUS_TYPE_INT32, &result,
+					DBUS_TYPE_STRING, &address,
+					DBUS_TYPE_UINT32, &remote_dev_info->class,
+					DBUS_TYPE_INT16, &remote_dev_info->rssi,
+					DBUS_TYPE_STRING, &remote_dev_info->name,
+					DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
+					DBUS_TYPE_BOOLEAN, &remote_dev_info->connected,
+					DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
+					DBUS_TYPE_BYTE, &remote_dev_info->device_type,
+					DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
+					&remote_dev_info->uuids, remote_dev_info->uuid_count,
+					DBUS_TYPE_INVALID);
 
 			_bt_free_device_info(remote_dev_info);
 			g_free(address);
@@ -835,14 +947,8 @@ void _bt_handle_headset_event(DBusMessage *msg)
 		}
 		g_free(address);
 	} else if (strcasecmp(property, "State") == 0) {
-		int event = BLUETOOTH_EVENT_NONE;
 		int sco_connected = FALSE;
 		char *state = NULL;
-		char *address;
-
-		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-		_bt_convert_device_path_to_address(path, address);
 
 		dbus_message_iter_next(&item_iter);
 		dbus_message_iter_recurse(&item_iter, &value_iter);
@@ -851,27 +957,16 @@ void _bt_handle_headset_event(DBusMessage *msg)
 		/* This code assumes we support only 1 headset connection */
 		/* Need to use the headset list, if we support multi-headsets */
 		if (strcasecmp(state, "Playing") == 0) {
-			event = BLUETOOTH_EVENT_AG_AUDIO_CONNECTED;
 			sco_connected = TRUE;
 		} else if (strcasecmp(state, "connected") == 0 ||
 			    strcasecmp(state, "disconnected") == 0) {
-			event = BLUETOOTH_EVENT_AG_AUDIO_DISCONNECTED;
 			sco_connected = FALSE;
 		} else {
 			BT_ERR("Not handled state - %s", state);
-			g_free(address);
 			return;
 		}
-
 		if (vconf_set_bool(VCONFKEY_BT_HEADSET_SCO, sco_connected) < 0)
 			BT_ERR("vconf_set_bool - Failed\n");
-
-		_bt_send_event(BT_HEADSET_EVENT, event,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
-
-		g_free(address);
 	} else if (strcasecmp(property, "SpeakerGain") == 0) {
 		guint16 spkr_gain;
 		char *address;
@@ -939,21 +1034,33 @@ void _bt_handle_sink_event(DBusMessage *msg)
 
 	ret_if(property == NULL);
 
+	BT_DBG("Property: %s", property);
+
 	if (strcasecmp(property, "Connected") == 0) {
 		int event = BLUETOOTH_EVENT_NONE;
 		char *address;
+		char connected_address[BT_ADDRESS_STRING_SIZE + 1];
+		bluetooth_device_address_t device_address;
+		gboolean connected;
 
 		dbus_message_iter_next(&item_iter);
 		dbus_message_iter_recurse(&item_iter, &value_iter);
 		dbus_message_iter_get_basic(&value_iter, &property_flag);
 
+		event = (property_flag == TRUE) ?
+				BLUETOOTH_EVENT_AV_CONNECTED :
+				BLUETOOTH_EVENT_AV_DISCONNECTED;
+		/* Handle disconnect using the property "State" to handle
+		    the scenario "connecting->disconnected" */
+		if (event == BLUETOOTH_EVENT_AV_DISCONNECTED)
+			return;
+
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
 		_bt_convert_device_path_to_address(path, address);
 
-		event = (property_flag == TRUE) ?
-				BLUETOOTH_EVENT_AV_CONNECTED :
-				BLUETOOTH_EVENT_AV_DISCONNECTED;
+		__bt_set_device_values(property_flag,
+				VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
 
 		_bt_send_event(BT_HEADSET_EVENT, event,
 			DBUS_TYPE_INT32, &result,
@@ -965,7 +1072,56 @@ void _bt_handle_sink_event(DBusMessage *msg)
 			DBUS_TYPE_STRING, &address,
 			DBUS_TYPE_INVALID);
 
-		if (event == BLUETOOTH_EVENT_AV_DISCONNECTED) {
+		/* Check for existing Media device to disconnect */
+		connected = _bt_is_headset_type_connected(BT_AUDIO_A2DP,
+							connected_address);
+		if (connected) {
+			/* Match connected device address */
+			if (g_strcmp0(connected_address, address) != 0) {
+				/* Convert BD adress from string type */
+				_bt_convert_addr_string_to_type(
+						device_address.addr,
+						connected_address);
+				_bt_audio_disconnect(0, BT_AUDIO_A2DP,
+						&device_address, NULL);
+			}
+		}
+
+		/* Add data to the connected list */
+		_bt_add_headset_to_list(BT_AUDIO_A2DP,
+				BT_STATE_CONNECTED, address);
+
+		g_free(address);
+	} else if (strcasecmp(property, "State") == 0) {
+
+		const char *value;
+
+		dbus_message_iter_next(&item_iter);
+		dbus_message_iter_recurse(&item_iter, &value_iter);
+		dbus_message_iter_get_basic(&value_iter, &value);
+
+		if (g_strcmp0(value, "disconnected") == 0) {
+			char *address;
+
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+
+			_bt_convert_device_path_to_address(path, address);
+
+			__bt_set_device_values(FALSE,
+				VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
+
+			_bt_send_event(BT_HEADSET_EVENT,
+				BLUETOOTH_EVENT_AV_DISCONNECTED,
+				DBUS_TYPE_INT32, &result,
+				DBUS_TYPE_STRING, &address,
+				DBUS_TYPE_INVALID);
+
+			_bt_send_event(BT_AVRCP_EVENT,
+				BLUETOOTH_EVENT_AV_DISCONNECTED,
+				DBUS_TYPE_INT32, &result,
+				DBUS_TYPE_STRING, &address,
+				DBUS_TYPE_INVALID);
+
 			/* Remove data from the connected list */
 			_bt_remove_headset_from_list(BT_AUDIO_A2DP, address);
 			wait_list = _bt_get_audio_wait_data();
@@ -988,31 +1144,8 @@ void _bt_handle_sink_event(DBusMessage *msg)
 							&device_address,
 							wait_list->out_param1);
 			}
-		} else if (event == BLUETOOTH_EVENT_AV_CONNECTED){
-			/* Check for existing Media device to disconnect */
-			char connected_address[BT_ADDRESS_STRING_SIZE + 1];
-			bluetooth_device_address_t device_address;
-			gboolean connected;
-
-			connected = _bt_is_headset_type_connected(BT_AUDIO_A2DP,
-								connected_address);
-			if (connected) {
-				/* Match connected device address */
-				if (g_strcmp0(connected_address, address) != 0) {
-					/* Convert BD adress from string type */
-					_bt_convert_addr_string_to_type(
-							device_address.addr,
-							connected_address);
-					_bt_audio_disconnect(0, BT_AUDIO_A2DP,
-							&device_address, NULL);
-				}
-			}
-
-			/* Add data to the connected list */
-			_bt_add_headset_to_list(BT_AUDIO_A2DP,
-					BT_STATE_CONNECTED, address);
+			g_free(address);
 		}
-		g_free(address);
 	}
 }
 
@@ -1161,16 +1294,78 @@ static DBusHandlerResult __bt_obexd_event_filter(DBusConnection *conn,
 	} else if (strcasecmp(member, "TransferCompleted") == 0) {
 		char *transfer_path = NULL;
 		gboolean success;
+		char *file_path;
 
 		if (!dbus_message_get_args(msg, NULL,
 			DBUS_TYPE_OBJECT_PATH, &transfer_path,
+			DBUS_TYPE_STRING, &file_path,
 			DBUS_TYPE_BOOLEAN, &success,
 			DBUS_TYPE_INVALID)) {
 			BT_ERR("Unexpected parameters in signal");
 			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 		}
 
-		_bt_obex_transfer_completed(transfer_path, success);
+		_bt_obex_transfer_completed(transfer_path, file_path, success);
+	} else if (strcasecmp(member, "SessionCreated") == 0) {
+		char *session_path = NULL;
+		guint16 service;
+
+		if (!dbus_message_get_args(msg, NULL,
+			DBUS_TYPE_OBJECT_PATH, &session_path,
+			DBUS_TYPE_UINT16, &service,
+			DBUS_TYPE_INVALID)) {
+			BT_ERR("Unexpected parameters in signal");
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		}
+
+		switch (service) {
+		case OBEX_OPP:
+			BT_DBG("OPP server was connected.");
+			_bt_obex_transfer_connected();
+			break;
+		case OBEX_FTP:
+			BT_DBG("FTP server was connected.");
+			break;
+		case OBEX_PBAP:
+			BT_DBG("PBAP server was connected.");
+			break;
+		case OBEX_MAS:
+			BT_DBG("MAP server was connected.");
+			break;
+		default:
+			BT_ERR("Unknown obex connection");
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		}
+	} else if (strcasecmp(member, "SessionRemoved") == 0) {
+		char *session_path = NULL;
+		guint16 service;
+
+		if (!dbus_message_get_args(msg, NULL,
+			DBUS_TYPE_OBJECT_PATH, &session_path,
+			DBUS_TYPE_UINT16, &service,
+			DBUS_TYPE_INVALID)) {
+			BT_ERR("Unexpected parameters in signal");
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		}
+
+		switch (service) {
+		case OBEX_OPP:
+			BT_DBG("OPP server was disconnected.");
+			_bt_obex_transfer_disconnected();
+			break;
+		case OBEX_FTP:
+			BT_DBG("FTP server was disconnected.");
+			break;
+		case OBEX_PBAP:
+			BT_DBG("PBAP server was disconnected.");
+			break;
+		case OBEX_MAS:
+			BT_DBG("MAP server was disconnected.");
+			break;
+		default:
+			BT_ERR("Unknown obex disconnection");
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		}
 	}
 
 	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;

@@ -28,6 +28,8 @@ extern "C" {
 
 gboolean _bt_terminate_service(gpointer user_data);
 
+gboolean _bt_reliable_terminate_service(gpointer user_data);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

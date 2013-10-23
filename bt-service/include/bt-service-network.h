@@ -43,6 +43,9 @@ int _bt_network_connect(int request_id, int role,
 int _bt_network_disconnect(int request_id,
 		bluetooth_device_address_t *device_address);
 
+int _bt_network_server_disconnect(int request_id,
+		bluetooth_device_address_t *device_address);
+
 
 #ifdef __cplusplus
 }

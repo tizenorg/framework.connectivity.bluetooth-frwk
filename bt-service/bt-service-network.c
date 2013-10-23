@@ -62,10 +62,8 @@ static void __bt_network_connect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	if (g_error != NULL) {
 		BT_ERR("Network Connect Dbus Call Error: %s\n", g_error->message);
 		result = BLUETOOTH_ERROR_INTERNAL;
-		goto dbus_return;
 	}
 
-dbus_return:
 	if (req_info->context == NULL)
 		goto done;
 
@@ -127,10 +125,8 @@ static void __bt_network_disconnect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	if (g_error != NULL) {
 		BT_ERR("Network Connect Dbus Call Error: %s\n", g_error->message);
 		result = BLUETOOTH_ERROR_INTERNAL;
-		goto dbus_return;
 	}
 
-dbus_return:
 	if (req_info->context == NULL)
 		goto done;
 
@@ -354,6 +350,51 @@ int _bt_network_disconnect(int request_id,
 			(DBusGProxyCallNotify)__bt_network_disconnect_cb,
 			func_data, NULL, G_TYPE_INVALID)) {
 		BT_ERR("network disconnect Dbus Call Error");
+		g_object_unref(profile_proxy);
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	return BLUETOOTH_ERROR_NONE;
+}
+
+int _bt_network_server_disconnect(int request_id,
+		bluetooth_device_address_t *device_address)
+{
+	gchar *adapter_path = NULL;
+	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
+	bt_function_data_t *func_data;
+	DBusGProxy *profile_proxy;
+	DBusGConnection *conn;
+
+	BT_CHECK_PARAMETER(device_address, return);
+
+	conn = _bt_get_system_gconn();
+	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	adapter_path = _bt_get_adapter_path();
+	if (adapter_path == NULL) {
+		BT_ERR("No adapter found");
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	_bt_convert_addr_type_to_string(address, device_address->addr);
+
+	profile_proxy = dbus_g_proxy_new_for_name(conn, BT_BLUEZ_NAME,
+				      adapter_path, BT_NETWORK_SERVER_INTERFACE);
+	g_free(adapter_path);
+	retv_if(profile_proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
+	func_data = g_malloc0(sizeof(bt_function_data_t));
+
+	func_data->address = g_strdup(address);
+	func_data->req_id = request_id;
+
+	if (!dbus_g_proxy_begin_call(profile_proxy, "Disconnect",
+			(DBusGProxyCallNotify)__bt_network_disconnect_cb,
+			func_data, NULL, G_TYPE_STRING, address,
+			G_TYPE_INVALID)) {
+		BT_ERR("network server disconnect Dbus Call Error");
+		g_free(func_data->address);
+		g_free(func_data);
 		g_object_unref(profile_proxy);
 		return BLUETOOTH_ERROR_INTERNAL;
 	}

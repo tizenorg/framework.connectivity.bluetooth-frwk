@@ -67,11 +67,11 @@ BT_EXPORT_API int bluetooth_hid_connect(hid_device_address_t *device_address)
 	BT_CHECK_PARAMETER(device_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_HID);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_HID);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
 
@@ -92,11 +92,11 @@ BT_EXPORT_API int bluetooth_hid_disconnect(hid_device_address_t *device_address)
 	BT_CHECK_PARAMETER(device_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_HID);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_HID);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
 

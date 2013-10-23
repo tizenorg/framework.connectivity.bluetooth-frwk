@@ -65,6 +65,8 @@ int _bt_set_discoverable_mode(int discoverable_mode, int timeout);
 
 int _bt_start_discovery(void);
 
+int _bt_start_custom_discovery(bt_discovery_role_type_t role);
+
 int _bt_cancel_discovery(void);
 
 int _bt_get_bonded_devices(GArray **dev_list);
@@ -87,6 +89,10 @@ int _bt_get_discoverable_timeout_property(void);
 bt_status_t _bt_adapter_get_status(void);
 
 void _bt_handle_flight_mode_noti(void);
+
+void _bt_handle_power_saving_mode_noti(void);
+
+void _bt_set_disabled(int result);
 
 #ifdef __cplusplus
 }

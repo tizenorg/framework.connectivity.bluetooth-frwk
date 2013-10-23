@@ -19,6 +19,8 @@ bt-rfcomm-client.c
 bt-rfcomm-server.c
 bt-request-sender.c
 bt-event-handler.c
+bt-telephony-glue.c
+bt-gatt-glue.c
 )
 
 SET(HEADERS
@@ -41,7 +43,7 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 INCLUDE(FindPkgConfig)
 pkg_check_modules(packages REQUIRED dlog dbus-glib-1 gobject-2.0 gmodule-2.0 vconf
-libxml-2.0 syspopup-caller security-server)
+libxml-2.0 syspopup-caller security-server glib-2.0 gio-unix-2.0)
 
 FOREACH(flag ${packages_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
@@ -63,10 +65,14 @@ FIND_PROGRAM(MARSHALTOOL NAMES glib-genmarshal)
 EXEC_PROGRAM("${MARSHALTOOL}" ARGS "--prefix=marshal ${CMAKE_CURRENT_SOURCE_DIR}/marshal.list --header > ${CMAKE_CURRENT_SOURCE_DIR}/include/marshal.h")
 EXEC_PROGRAM("${MARSHALTOOL}" ARGS "--prefix=marshal ${CMAKE_CURRENT_SOURCE_DIR}/marshal.list --body > ${CMAKE_CURRENT_SOURCE_DIR}/marshal.c")
 
+FIND_PROGRAM(GDBUS_CODE_GEN NAMES gdbus-codegen)
+EXEC_PROGRAM("${GDBUS_CODE_GEN}" ARGS "--interface-prefix bt --generate-c-code ${CMAKE_CURRENT_SOURCE_DIR}/bt-gatt-glue ${CMAKE_CURRENT_SOURCE_DIR}/bt-gatt.xml")
+
 FIND_PROGRAM(DBUS_BINDING_TOOL NAMES dbus-binding-tool)
 EXEC_PROGRAM("${DBUS_BINDING_TOOL}" ARGS "--prefix=bt ${CMAKE_CURRENT_SOURCE_DIR}/bt-request-service.xml --mode=glib-client --output=${CMAKE_CURRENT_SOURCE_DIR}/include/bt-request-service.h")
-EXEC_PROGRAM("${DBUS_BINDING_TOOL}" ARGS "--prefix=bluetooth_gatt ${CMAKE_CURRENT_SOURCE_DIR}/bt-gatt.xml --mode=glib-server --output=${CMAKE_CURRENT_SOURCE_DIR}/include/bt-gatt-glue.h")
-EXEC_PROGRAM("${DBUS_BINDING_TOOL}" ARGS "--prefix=bluetooth_telephony_method ${CMAKE_CURRENT_SOURCE_DIR}/bt-telephony.xml --mode=glib-server --output=${CMAKE_CURRENT_SOURCE_DIR}/include/bt-telephony-glue.h")
+
+FIND_PROGRAM(GDBUS_CODE_GEN NAMES gdbus-codegen)
+EXEC_PROGRAM("${GDBUS_CODE_GEN}" ARGS "--interface-prefix bt --generate-c-code ${CMAKE_CURRENT_SOURCE_DIR}/bt-telephony-glue ${CMAKE_CURRENT_SOURCE_DIR}/bt-telephony.xml")
 
 ADD_LIBRARY(bluetooth-api SHARED ${SRCS})
 SET_TARGET_PROPERTIES(bluetooth-api PROPERTIES SOVERSION ${VERSION_MAJOR})

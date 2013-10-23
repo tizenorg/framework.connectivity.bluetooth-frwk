@@ -23,6 +23,7 @@
 #include <string.h>
 #include <privilege-control.h>
 #include <vconf.h>
+#include <systemd/sd-daemon.h>
 
 #include "bt-internal-types.h"
 #include "bt-service-common.h"
@@ -58,12 +59,17 @@ static void __bt_sigterm_handler(int signo)
 
 gboolean _bt_terminate_service(gpointer user_data)
 {
-	int value;
+	int flight_mode_value = 0;
+	int ps_mode_value = 0;
 
-	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE, &value) != 0)
+	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE, &flight_mode_value) != 0)
 		BT_ERR("Fail to get the flight_mode_deactivated value");
 
-	if (value == 1) {
+	if (vconf_get_int(BT_OFF_DUE_TO_POWER_SAVING_MODE,
+						&ps_mode_value) != 0)
+		BT_ERR("Fail to get the ps_mode_deactivated value");
+
+	if (flight_mode_value == 1 || ps_mode_value > 0) {
 		BT_DBG("Bt service not terminated");
 
 		_bt_deinit_bluez_proxy();
@@ -83,26 +89,86 @@ gboolean _bt_terminate_service(gpointer user_data)
 	return FALSE;
 }
 
+gboolean _bt_reliable_terminate_service(gpointer user_data)
+{
+	int flight_mode_value = 0;
+	int ps_mode_value = 0;
+
+	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE, &flight_mode_value) != 0)
+		BT_ERR("Fail to get the flight_mode_deactivated value");
+
+	if (vconf_get_int(BT_OFF_DUE_TO_POWER_SAVING_MODE,
+						&ps_mode_value) != 0)
+		BT_ERR("Fail to get the ps_mode_deactivated value");
+
+	if (flight_mode_value == 1 || ps_mode_value > 0) {
+		BT_DBG("Bt service not terminated");
+
+		_bt_set_disabled(BLUETOOTH_ERROR_NONE);
+		_bt_deinit_bluez_proxy();
+
+		return FALSE;
+	}
+
+	_bt_deinit_service_event_reciever();
+
+	_bt_deinit_proxys();
+
+	_bt_clear_request_list();
+
+	_bt_set_disabled(BLUETOOTH_ERROR_NONE);
+
+	_bt_deinit_service_event_sender();
+
+	_bt_service_unregister();
+
+	terminated = TRUE;
+
+	BT_DBG("Terminating the bt-service daemon");
+
+	if (main_loop != NULL) {
+		g_main_loop_quit(main_loop);
+	} else {
+		exit(0);
+	}
+
+	return FALSE;
+}
+
 static gboolean __bt_check_bt_service(void *data)
 {
 	int bt_status = VCONFKEY_BT_STATUS_OFF;
 	int flight_mode_deactivation = 0;
+	int ps_mode_deactivation = 0;
+	int bt_off_due_to_timeout = 0;
 
 	if (vconf_get_int(VCONFKEY_BT_STATUS, &bt_status) < 0) {
 		BT_DBG("no bluetooth device info, so BT was disabled at previous session");
 	}
 
-	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE, &flight_mode_deactivation) != 0)
-			BT_ERR("Fail to get the flight_mode_deactivated value");
+	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE,
+						&flight_mode_deactivation) != 0)
+			BT_ERR("Fail to get the flight_mode_deactivation value");
 
-	if (bt_status != VCONFKEY_BT_STATUS_OFF) {
+	if (vconf_get_int(BT_OFF_DUE_TO_POWER_SAVING_MODE,
+						&ps_mode_deactivation) != 0)
+			BT_ERR("Fail to get the ps_mode_deactivation value");
+
+	if (vconf_get_int(BT_OFF_DUE_TO_TIMEOUT, &bt_off_due_to_timeout) != 0)
+			BT_ERR("Fail to get %s",BT_OFF_DUE_TO_TIMEOUT);
+
+	if (bt_status != VCONFKEY_BT_STATUS_OFF ||
+		bt_off_due_to_timeout) {
 		BT_DBG("Previous session was enabled.");
 
 		/* Enable the BT */
 		_bt_enable_adapter();
 	} else if (bt_status == VCONFKEY_BT_STATUS_OFF &&
-					flight_mode_deactivation == 1) {
-		_bt_handle_flight_mode_noti();
+			(flight_mode_deactivation == 1 || ps_mode_deactivation > 0)) {
+		if (flight_mode_deactivation == 1)
+			_bt_handle_flight_mode_noti();
+		if (ps_mode_deactivation > 0)
+			_bt_handle_power_saving_mode_noti();
 	} else {
 		bt_status_t status = _bt_adapter_get_status();
 		int adapter_enabled = 0;
@@ -137,7 +203,7 @@ int main(void)
 
 	g_type_init();
 
-	if (set_app_privilege("bluetooth-frwk-service", NULL, NULL) !=
+	if (perm_app_set_privilege("bluetooth-frwk-service", NULL, NULL) !=
 								PC_OPERATION_SUCCESS)
 		BT_ERR("Failed to set app privilege.\n");
 
@@ -162,7 +228,7 @@ int main(void)
 
 	_bt_init_request_list();
 
-	g_idle_add((GSourceFunc)__bt_check_bt_service, NULL);
+	g_timeout_add_seconds(1, (GSourceFunc)__bt_check_bt_service, NULL);
 
 	if (terminated == TRUE) {
 		__bt_release_service();
@@ -171,13 +237,16 @@ int main(void)
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 
+	sd_notify(0, "READY=1");
+
 	g_main_loop_run(main_loop);
 
 	if (main_loop != NULL) {
 		g_main_loop_unref(main_loop);
 	}
 
-	__bt_release_service();
+	if (terminated == FALSE)
+		__bt_release_service();
 
 	return 0;
 }

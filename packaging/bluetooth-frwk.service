@@ -8,6 +8,7 @@ After=dbus.service
 Type=simple
 ExecStart=/usr/bin/bt-service
 RemainAfterExit=yes
+Environment=TIZEN_PLATFORMLOGGING_MODE=1
 
 [Install]
 WantedBy=tizen-middleware.target.wants

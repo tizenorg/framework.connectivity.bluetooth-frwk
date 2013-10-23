@@ -3,28 +3,23 @@
 <node>
   <interface name="org.tizen.csd.Call.Instance">
     <method name="Answer">
-      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-       <arg type="u" name="callid"/>
+       <arg type="u" name="callid" direction="in"/>
     </method>
 
     <method name="Release">
-      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-      <arg type="u" name="callid"/>
+      <arg type="u" name="callid" direction="in"/>
     </method>
 
     <method name="Reject">
-      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-      <arg type="u" name="callid"/>
+      <arg type="u" name="callid" direction="in"/>
     </method>
 
     <method name="Threeway">
-      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-      <arg type="u" name="value"/>
+      <arg type="u" name="value" direction="in"/>
     </method>
 
     <method name="SendDtmf">
-      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
-      <arg type="s" name="dtmf"/>
+      <arg type="s" name="dtmf" direction="in"/>
     </method>
 
   </interface>

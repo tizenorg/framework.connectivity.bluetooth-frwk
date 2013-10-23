@@ -36,8 +36,179 @@
 
 static bt_user_info_t user_info[BT_MAX_USER_INFO];
 static DBusGConnection *system_conn = NULL;
+static GDBusConnection *system_gdbus_conn = NULL;
+
 static char *cookie;
 static size_t cookie_size;
+
+
+#ifdef __ENABLE_GDBUS__
+static GDBusConnection *system_gconn = NULL;
+
+GDBusConnection *__bt_gdbus_init_system_gconn(void)
+{
+	GError *error = NULL;
+
+	g_type_init();
+
+	if (system_gconn != NULL)
+		return system_gconn;
+
+	system_gconn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+
+	if (!system_gconn) {
+		BT_ERR("Unable to connect to dbus: %s", error->message);
+		g_clear_error(&error);
+	}
+
+	return system_gconn;
+}
+
+GDBusConnection *_bt_gdbus_get_system_gconn(void)
+{
+	return system_gconn ? system_gconn : __bt_gdbus_init_system_gconn();
+}
+
+int _bt_gdbus_get_adapter_path(GDBusConnection *conn, char *path)
+{
+	GError *err = NULL;
+	GDBusProxy *manager_proxy = NULL;
+	GVariant *result = NULL;
+	char *adapter_path = NULL;
+
+	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	manager_proxy =  g_dbus_proxy_new_sync(conn,
+			G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME,
+			BT_MANAGER_PATH,
+			BT_MANAGER_INTERFACE,
+			NULL, &err);
+	if (!manager_proxy) {
+		BT_ERR("Unable to create proxy: %s", err->message);
+		goto fail;
+	}
+
+	result = g_dbus_proxy_call_sync(manager_proxy, "DefaultAdapter", NULL,
+			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+	if (!result) {
+		if (err != NULL)
+			BT_ERR("Fail to get DefaultAdapter (Error: %s)", err->message);
+		else
+			BT_ERR("Fail to get DefaultAdapter");
+
+		goto fail;
+	}
+
+	if (g_strcmp0(g_variant_get_type_string(result), "(o)")) {
+		BT_ERR("Incorrect result\n");
+		goto fail;
+	}
+
+	g_variant_get(result, "(&o)", &adapter_path);
+
+	if (adapter_path == NULL ||
+		strlen(adapter_path) >= BT_ADAPTER_OBJECT_PATH_MAX) {
+		BT_ERR("Adapter path is inproper\n");
+		goto fail;
+	}
+
+	if (path)
+		g_strlcpy(path, adapter_path, BT_ADAPTER_OBJECT_PATH_MAX);
+
+	g_variant_unref(result);
+	g_object_unref(manager_proxy);
+
+	return BLUETOOTH_ERROR_NONE;
+
+fail:
+	g_clear_error(&err);
+
+	if (result)
+		g_variant_unref(result);
+
+	if (manager_proxy)
+		g_object_unref(manager_proxy);
+
+	return BLUETOOTH_ERROR_INTERNAL;
+}
+
+GDBusProxy *_bt_gdbus_get_adapter_proxy(GDBusConnection *conn)
+{
+	GError *err = NULL;
+	GDBusProxy *manager_proxy = NULL;
+	GDBusProxy *adapter_proxy = NULL;
+	GVariant *result = NULL;
+	char *adapter_path = NULL;
+
+	retv_if(conn == NULL, NULL);
+
+	manager_proxy = g_dbus_proxy_new_sync(conn,
+			G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME,
+			BT_MANAGER_PATH,
+			BT_MANAGER_INTERFACE,
+			NULL, &err);
+	if (!manager_proxy) {
+		if (err)
+			BT_ERR("Unable to create proxy: %s", err->message);
+
+		goto fail;
+	}
+
+	result = g_dbus_proxy_call_sync(manager_proxy, "DefaultAdapter", NULL,
+			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+	if (!result) {
+		if (err)
+			BT_ERR("Fail to get DefaultAdapte: %s\n", err->message);
+
+		goto fail;
+	}
+
+	if (g_strcmp0(g_variant_get_type_string(result), "(o)")) {
+		BT_ERR("Incorrect result\n");
+		goto fail;
+	}
+
+	g_variant_get(result, "(&o)", &adapter_path);
+
+	if (adapter_path == NULL ||
+		strlen(adapter_path) >= BT_ADAPTER_OBJECT_PATH_MAX) {
+		BT_ERR("Adapter path is inproper\n");
+		goto fail;
+	}
+
+	adapter_proxy = g_dbus_proxy_new_sync(conn, G_DBUS_PROXY_FLAGS_NONE,
+					NULL,
+					BT_BLUEZ_NAME,
+					adapter_path,
+					BT_ADAPTER_INTERFACE,
+					NULL,
+					&err);
+	if (!adapter_proxy) {
+		if (err)
+			BT_ERR("Error: %s\n", err->message);
+
+		goto fail;
+	}
+
+	g_variant_unref(result);
+	g_object_unref(manager_proxy);
+
+	return adapter_proxy;
+
+fail:
+	g_clear_error(&err);
+
+	if (result)
+		g_variant_unref(result);
+
+	if (manager_proxy)
+		g_object_unref(manager_proxy);
+
+	return NULL;
+}
+#endif
 
 void _bt_print_device_address_t(const bluetooth_device_address_t *addr)
 {
@@ -134,7 +305,7 @@ void _bt_convert_addr_string_to_type(unsigned char *addr,
 
         for (i = 0; i < BT_ADDRESS_LENGTH_MAX; i++) {
                 addr[i] = strtol(address, &ptr, 16);
-                if (ptr != NULL) {
+                if (ptr[0] != '\0') {
                         if (ptr[0] != ':')
                                 return;
 
@@ -158,7 +329,7 @@ void _bt_convert_addr_type_to_string(char *address,
 int _bt_copy_utf8_string(char *dest, const char *src, unsigned int length)
 {
 	int i;
-	char *p = src;
+	const char *p = src;
 	char *next;
 	int count;
 
@@ -180,6 +351,28 @@ int _bt_copy_utf8_string(char *dest, const char *src, unsigned int length)
 	return BLUETOOTH_ERROR_NONE;
 }
 
+gboolean _bt_utf8_validate(char *name)
+{
+	BT_DBG("+");
+	gunichar2 *u16;
+	glong items_written = 0;
+
+	if (FALSE == g_utf8_validate(name, -1, NULL))
+		return FALSE;
+
+	u16 = g_utf8_to_utf16(name, -1, NULL, &items_written, NULL);
+	if (u16 == NULL)
+		return FALSE;
+
+	g_free(u16);
+
+	if (items_written != g_utf8_strlen(name, -1))
+		return FALSE;
+
+	BT_DBG("-");
+	return TRUE;
+}
+
 int _bt_get_adapter_path(DBusGConnection *conn, char *path)
 {
 	GError *err = NULL;
@@ -199,7 +392,6 @@ int _bt_get_adapter_path(DBusGConnection *conn, char *path)
 				&adapter_path,
 				G_TYPE_INVALID)) {
 		if (err != NULL) {
-			BT_ERR("Getting DefaultAdapter failed: [%s]\n", err->message);
 			g_error_free(err);
 		}
 		g_object_unref(manager_proxy);
@@ -219,6 +411,50 @@ done:
 	g_object_unref(manager_proxy);
 
 	return ret;
+}
+
+int _bt_get_adapter_path_dbus(DBusConnection *conn, char *path)
+{
+        DBusMessage *msg;
+        DBusMessage *reply;
+        DBusError err;
+        char *adapter_path = NULL;
+        int ret = BLUETOOTH_ERROR_NONE;
+
+        msg = dbus_message_new_method_call(BT_BLUEZ_NAME, BT_MANAGER_PATH,
+                        BT_MANAGER_INTERFACE, "DefaultAdapter");
+
+        retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+        dbus_error_init(&err);
+        reply = dbus_connection_send_with_reply_and_block(conn, msg,
+                                                        -1, &err);
+        if (!reply) {
+                BT_ERR("dbus error : DefaultAdapter method failed...");
+                if (dbus_error_is_set(&err)) {
+                        BT_ERR("%s", err.message);
+                        dbus_error_free(&err);
+                }
+                return BLUETOOTH_ERROR_INTERNAL;
+        }
+        if (!dbus_message_get_args(reply, &err,
+                                DBUS_TYPE_OBJECT_PATH, &adapter_path,
+                                DBUS_TYPE_INVALID)) {
+                BT_ERR("adapter path error is %s", err.message);
+                dbus_error_free(&err);
+                return BLUETOOTH_ERROR_INTERNAL;
+        }
+        BT_DBG("adapter path is %s", adapter_path);
+        dbus_message_unref(msg);
+        dbus_message_unref(reply);
+        if (adapter_path == NULL ||
+                strlen(adapter_path) >= BT_ADAPTER_OBJECT_PATH_MAX) {
+                BT_ERR("Adapter path is inproper\n");
+                ret = BLUETOOTH_ERROR_INTERNAL;
+        }
+        if (path)
+                g_strlcpy(path, adapter_path, BT_ADAPTER_OBJECT_PATH_MAX);
+        return ret;
 }
 
 DBusGProxy *_bt_get_adapter_proxy(DBusGConnection *conn)
@@ -299,6 +535,24 @@ DBusGConnection *__bt_init_system_gconn(void)
 DBusGConnection *_bt_get_system_gconn(void)
 {
 	return (system_conn) ? system_conn : __bt_init_system_gconn();
+}
+
+GDBusConnection *_bt_init_system_gdbus_conn(void)
+{
+        g_type_init();
+        GError *error = NULL;
+        if (system_gdbus_conn == NULL) {
+                system_gdbus_conn =
+                g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+                if (error) {
+                        BT_ERR("GDBus connection Error : %s \n",
+                                        error->message);
+                        g_free(error);
+                        return NULL;
+                }
+        }
+
+        return system_gdbus_conn;
 }
 
 DBusConnection *_bt_get_system_conn(void)
@@ -396,7 +650,9 @@ BT_EXPORT_API int bluetooth_is_supported(void)
 BT_EXPORT_API int bluetooth_register_callback(bluetooth_cb_func_ptr callback_ptr, void *user_data)
 {
 	int ret;
-
+#ifdef __ENABLE_GDBUS__
+	__bt_gdbus_init_system_gconn();
+#endif
 	__bt_init_system_gconn();
 
 	ret = _bt_init_event_handler();
@@ -412,13 +668,29 @@ BT_EXPORT_API int bluetooth_register_callback(bluetooth_cb_func_ptr callback_ptr
 	_bt_set_user_data(BT_COMMON, (void *)callback_ptr, user_data);
 
 	/* Register All events */
-	_bt_register_event(BT_ADAPTER_EVENT, (void *)callback_ptr, user_data);
-	_bt_register_event(BT_DEVICE_EVENT, (void *)callback_ptr, user_data);
-	_bt_register_event(BT_NETWORK_EVENT, (void *)callback_ptr, user_data);
-	_bt_register_event(BT_RFCOMM_CLIENT_EVENT, (void *)callback_ptr, user_data);
-	_bt_register_event(BT_RFCOMM_SERVER_EVENT, (void *)callback_ptr, user_data);
+	ret = _bt_register_event(BT_ADAPTER_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+	ret = _bt_register_event(BT_DEVICE_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+	ret = _bt_register_event(BT_NETWORK_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+	ret = _bt_register_event(BT_RFCOMM_CLIENT_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+	ret = _bt_register_event(BT_RFCOMM_SERVER_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+
+	_bt_register_name_owner_changed();
 
 	return BLUETOOTH_ERROR_NONE;
+fail:
+	BT_ERR("Fail to do _bt_register_event()");
+	bluetooth_unregister_callback();
+	return ret;
 }
 
 BT_EXPORT_API int bluetooth_unregister_callback(void)
@@ -431,13 +703,20 @@ BT_EXPORT_API int bluetooth_unregister_callback(void)
 	_bt_unregister_event(BT_RFCOMM_CLIENT_EVENT);
 	_bt_unregister_event(BT_RFCOMM_SERVER_EVENT);
 
+	_bt_unregister_name_owner_changed();
+
 	_bt_set_user_data(BT_COMMON, NULL, NULL);
 
 	if (system_conn) {
 		dbus_g_connection_unref(system_conn);
 		system_conn = NULL;
 	}
-
+#ifdef __ENABLE_GDBUS__
+	if (system_gconn) {
+		g_object_unref(system_gconn);
+		system_gconn = NULL;
+	}
+#endif
 	return BLUETOOTH_ERROR_NONE;
 }
 

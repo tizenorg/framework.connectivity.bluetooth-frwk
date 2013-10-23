@@ -129,6 +129,7 @@ int _bt_delete_request_list(int req_id)
 
 		if (info->req_id == req_id) {
 			req_list = g_slist_remove(req_list, info);
+			_bt_delete_request_id(info->req_id);
 			g_free(info);
 			return BLUETOOTH_ERROR_NONE;
 		}

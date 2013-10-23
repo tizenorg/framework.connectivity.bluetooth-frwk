@@ -297,6 +297,11 @@ static gboolean __bt_is_headset_connected(int type, int req_id,
 	if (!connected)
 		return FALSE;
 
+	BT_DBG("connected headset %s", connected_address);
+
+	if (g_strcmp0(connected_address, address) == 0)
+		return TRUE;
+
 	/* If already one device is waiting, remove current waiting device and add new */
 	if (g_wait_data != NULL) {
 		if (g_strcmp0(g_wait_data->address, address) != 0) {

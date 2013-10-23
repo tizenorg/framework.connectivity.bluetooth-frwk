@@ -178,7 +178,7 @@ int test_input_callback(void *data)
 
 		if (g_alert_char_handle) {
 			if (bluetooth_gatt_set_characteristics_value(g_alert_char_handle,
-						&g_alert_level, 1) != BLUETOOTH_ERROR_NONE)
+						&g_alert_level, 1, 0) != BLUETOOTH_ERROR_NONE)
 				TC_PRT("Set char val failed");
 
 			return 0;
@@ -246,7 +246,7 @@ static void __handle_alert_char(char *char_handle,
 	g_alert_char_handle = g_strdup(char_handle);
 
 	if (bluetooth_gatt_set_characteristics_value(char_handle,
-				&g_alert_level, 1) != BLUETOOTH_ERROR_NONE)
+				&g_alert_level, 1, 0) != BLUETOOTH_ERROR_NONE)
 		TC_PRT("Set char val failed");
 
 }

@@ -12,8 +12,8 @@
     </define>
 
     <assign>
-        <filesystem path="/etc/init.d/bluetooth-frwk-service" label="_" exec_label="none" />
-        <filesystem path="/usr/share/dbus-1/services/bluetooth-frwk-service.service" label="_"/>
+        <filesystem path="/usr/lib/systemd/user/bluetooth-frwk.service" label="_" exec_label="none" />
+        <filesystem path="/usr/lib/systemd/user/tizen-middleware.target.wants/bluetooth-frwk.service" label="_"/>
     </assign>
 
     <request>

@@ -77,7 +77,7 @@ static DBusGProxy *__bt_init_adapter_proxy(void)
 	if (!dbus_g_proxy_call(manager_proxy, "DefaultAdapter", NULL,
 			G_TYPE_INVALID, DBUS_TYPE_G_OBJECT_PATH,
 			&adapter_path, G_TYPE_INVALID)) {
-		BT_ERR("Fait to get DefaultAdapter");
+		BT_ERR("Fail to get DefaultAdapter");
 		return NULL;
 	}
 
@@ -236,7 +236,7 @@ void _bt_convert_addr_string_to_type(unsigned char *addr,
 
         for (i = 0; i < BT_ADDRESS_LENGTH_MAX; i++) {
                 addr[i] = strtol(address, &ptr, 16);
-                if (ptr != NULL) {
+                if (ptr[0] != '\0') {
                         if (ptr[0] != ':')
                                 return;
 

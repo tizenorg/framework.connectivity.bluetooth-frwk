@@ -178,7 +178,7 @@ static gboolean gap_agent_request_pin_code(GapAgent *agent,
 	if (sender == NULL)
 		return FALSE;
 
-	BT_DBG("Request PIN : agent %p sender %s priv->busname %s Device Path :%s\n",
+	BT_DBG("Request : agent %p sender %s priv->busname %s Device Path :%s\n",
 				agent, sender, priv->busname, path);
 
 	if (g_strcmp0(sender, priv->busname) != 0) {
@@ -963,4 +963,11 @@ gboolean _gap_agent_is_canceled(GapAgent *agent)
 	GapAgentPrivate *priv = GAP_AGENT_GET_PRIVATE(agent);
 
 	return priv->canceled;
+}
+
+void _gap_agent_set_canceled(GapAgent *agent, gboolean value)
+{
+	GapAgentPrivate *priv = GAP_AGENT_GET_PRIVATE(agent);
+
+	priv->canceled = value;
 }

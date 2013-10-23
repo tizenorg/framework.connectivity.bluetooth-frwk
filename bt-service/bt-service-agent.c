@@ -40,6 +40,7 @@
 #define BT_APP_AUTHORIZATION_TIMEOUT		15
 
 #define HFP_AUDIO_GATEWAY_UUID "0000111f-0000-1000-8000-00805f9b34fb"
+#define HSP_AUDIO_GATEWAY_UUID "00001112-0000-1000-8000-00805f9b34fb"
 #define A2DP_UUID "0000110D-0000-1000-8000-00805F9B34FB"
 #define AVRCP_TARGET_UUID "0000110c-0000-1000-8000-00805f9b34fb"
 #define OPP_UUID "00001105-0000-1000-8000-00805f9b34fb"
@@ -60,9 +61,8 @@
 #define BT_PIN_MAX_LENGTH 16
 #define BT_PASSKEY_MAX_LENGTH 4
 
-#define BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS 300
-
-static int bt_popup_retry_count = 0;
+#define BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS 200
+#define BT_AGENT_SYSPOPUP_MAX_ATTEMPT 3
 
 static int __bt_agent_is_auto_response(uint32_t dev_class, const gchar *address,
 							const gchar *name);
@@ -81,27 +81,29 @@ static void __bt_agent_release_memory(void)
 static gboolean __bt_agent_system_popup_timer_cb(gpointer user_data)
 {
 	int ret;
-	bundle *b = (bundle *) user_data;
-	retv_if(b == NULL, FALSE);
+	static int retry_count;
+	bundle *b = (bundle *)user_data;
+	retv_if(user_data == NULL, FALSE);
 
-	if (bt_popup_retry_count > 10) {
-		bt_popup_retry_count = 0;
-		bundle_free(b);
-		return FALSE;
-	}
+	++retry_count;
 
 	ret = syspopup_launch("bt-syspopup", b);
-
-	if (0 > ret) {
-		BT_DBG("Sorry Can not launch popup\n");
-		bt_popup_retry_count++;
-		return TRUE;
+	if (ret < 0) {
+		BT_ERR("Sorry! Can't launch popup, ret=%d, Re-try[%d] time..",
+							ret, retry_count);
+		if (retry_count >= BT_AGENT_SYSPOPUP_MAX_ATTEMPT) {
+			BT_ERR("Sorry!! Max retry %d reached", retry_count);
+			bundle_free(b);
+			retry_count = 0;
+			return FALSE;
+		}
 	} else {
-		BT_DBG("Hurray Popup launched \n");
-		bt_popup_retry_count = 0;
+		BT_DBG("Hurray!! Finally Popup launched");
+		retry_count = 0;
 		bundle_free(b);
-		return FALSE;
 	}
+
+	return (ret < 0) ? TRUE : FALSE;
 }
 
 static int __launch_system_popup(bt_agent_event_type_t event_type,
@@ -190,10 +192,9 @@ static int __launch_system_popup(bt_agent_event_type_t event_type,
 	ret = syspopup_launch("bt-syspopup", b);
 	if (0 > ret) {
 		BT_DBG("Popup launch failed...retry %d\n", ret);
-		bt_popup_retry_count = 0;
+
 		g_timeout_add(BT_AGENT_SYSPOPUP_TIMEOUT_FOR_MULTIPLE_POPUPS,
-			      (GSourceFunc) __bt_agent_system_popup_timer_cb,
-				b);
+			      (GSourceFunc)__bt_agent_system_popup_timer_cb, b);
 	} else {
 		bundle_free(b);
 	}
@@ -241,7 +242,9 @@ static gboolean __pincode_request(GapAgent *agent, DBusGProxy *device)
 	if (!name)
 		name = address;
 
-	if (__bt_agent_is_auto_response(device_class, address, name)) {
+	if (_bt_is_device_creating() == TRUE &&
+		_bt_is_bonding_device_address(address) == TRUE &&
+		__bt_agent_is_auto_response(device_class, address, name)) {
 		/* Use Fixed PIN "0000" for basic pairing*/
 		_bt_set_autopair_status_in_bonding_info(TRUE);
 		gap_agent_reply_pin_code(agent, GAP_AGENT_ACCEPT, "0000",
@@ -490,9 +493,10 @@ static gboolean __authorize_request(GapAgent *agent, DBusGProxy *device,
 	/* Check completed */
 
 	if (!strcasecmp(uuid, HFP_AUDIO_GATEWAY_UUID) ||
+	     !strcasecmp(uuid, HSP_AUDIO_GATEWAY_UUID) ||
 	     !strcasecmp(uuid, A2DP_UUID) ||
-	      !strcasecmp(uuid, HID_UUID) ||
-	       !strcasecmp(uuid, AVRCP_TARGET_UUID)) {
+	     !strcasecmp(uuid, HID_UUID) ||
+	     !strcasecmp(uuid, AVRCP_TARGET_UUID)) {
 		BT_DBG("Auto accept authorization for audio device (HFP, A2DP, AVRCP) [%s]", uuid);
 		gap_agent_reply_authorize(agent, GAP_AGENT_ACCEPT,
 					      NULL);
@@ -726,6 +730,11 @@ gboolean _bt_agent_is_canceled(void *agent)
 	return _gap_agent_is_canceled(agent);
 }
 
+void _bt_agent_set_canceled(void *agent, gboolean value)
+{
+	return _gap_agent_set_canceled(agent, value);
+}
+
 static gboolean __bt_agent_is_hid_keyboard(uint32_t dev_class)
 {
 	switch ((dev_class & 0x1f00) >> 8) {
@@ -856,6 +865,7 @@ static gboolean __bt_agent_is_auto_response(uint32_t dev_class,
 				const gchar *address, const gchar *name)
 {
 	gboolean is_headset = FALSE;
+	gboolean is_mouse = FALSE;
 	char lap_address[BT_LOWER_ADDRESS_LENGTH];
 
 	BT_DBG("bt_agent_is_headset_class, %d +", dev_class);
@@ -885,9 +895,13 @@ static gboolean __bt_agent_is_auto_response(uint32_t dev_class,
 			break;
 		}
 		break;
+	case 0x05:
+		if ((dev_class & 0xff) == 0x80)  /* 0x80: Pointing device(Mouse) */
+			is_mouse = TRUE;
+		break;
 	}
 
-	if (!is_headset)
+	if ((!is_headset) && (!is_mouse))
 		return FALSE;
 
 	/* Get the LAP(Lower Address part) */

@@ -119,14 +119,26 @@ BT_EXPORT_API int bluetooth_media_player_change_track(
 
 	memset(&meta_data, 0x00, sizeof(media_metadata_t));
 
-	if (_bt_copy_utf8_string(meta_data.title, metadata->title, BT_NAME_MAX))
+	if (_bt_copy_utf8_string(meta_data.title, metadata->title, BT_META_DATA_MAX_LEN))
 		BT_DBG("Error in copying Title\n");
-	if (_bt_copy_utf8_string(meta_data.artist, metadata->artist, BT_NAME_MAX))
+	if (_bt_copy_utf8_string(meta_data.artist, metadata->artist, BT_META_DATA_MAX_LEN))
 		BT_DBG("Error in copying Artist\n");
-	if (_bt_copy_utf8_string(meta_data.album, metadata->album, BT_NAME_MAX))
+	if (_bt_copy_utf8_string(meta_data.album, metadata->album, BT_META_DATA_MAX_LEN))
 		BT_DBG("Error in copying Album\n");
-	if (_bt_copy_utf8_string(meta_data.genre, metadata->genre, BT_NAME_MAX))
+	if (_bt_copy_utf8_string(meta_data.genre, metadata->genre, BT_META_DATA_MAX_LEN))
 		BT_DBG("Error in copying Genre\n");
+
+	if (_bt_utf8_validate(meta_data.title) == FALSE)
+		meta_data.title[0] = '\0';
+
+	if (_bt_utf8_validate(meta_data.artist) == FALSE)
+		meta_data.artist[0] = '\0';
+
+	if (_bt_utf8_validate(meta_data.album) == FALSE)
+		meta_data.album[0] = '\0';
+
+	if (_bt_utf8_validate(meta_data.genre) == FALSE)
+		meta_data.genre[0] = '\0';
 
 	meta_data.total_tracks = metadata->total_tracks;
 	meta_data.number = metadata->number;

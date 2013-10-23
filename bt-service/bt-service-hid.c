@@ -61,10 +61,8 @@ static void __bt_hid_connect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	if (g_error != NULL) {
 		BT_ERR("Hidh Connect Dbus Call Error: %s\n", g_error->message);
 		result = BLUETOOTH_ERROR_INTERNAL;
-		goto dbus_return;
 	}
 
-dbus_return:
 	if (req_info->context == NULL)
 		goto done;
 
@@ -126,10 +124,8 @@ static void __bt_hid_disconnect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 	if (g_error != NULL) {
 		BT_ERR("Hidh Connect Dbus Call Error: %s\n", g_error->message);
 		result = BLUETOOTH_ERROR_INTERNAL;
-		goto dbus_return;
 	}
 
-dbus_return:
 	if (req_info->context == NULL)
 		goto done;
 

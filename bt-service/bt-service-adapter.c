@@ -44,6 +44,10 @@
 #include "bt-service-main.h"
 #include "bt-service-avrcp.h"
 
+#ifndef VCONFKEY_SETAPPL_PSMODE
+#define VCONFKEY_SETAPPL_PSMODE "db/setting/psmode"
+#endif
+
 typedef struct {
 	guint event_id;
 	int timeout;
@@ -57,6 +61,7 @@ static gboolean cancel_by_user;
 static bt_status_t adapter_status = BT_DEACTIVATED;
 static void *adapter_agent = NULL;
 static DBusGProxy *core_proxy = NULL;
+static guint timer_id = 0;
 
 #define BT_CORE_NAME "org.projectx.bt_core"
 #define BT_CORE_PATH "/org/projectx/bt_core"
@@ -94,7 +99,10 @@ static gboolean __bt_timeout_handler(gpointer user_data)
 
 static int __bt_visibility_alarm_cb(alarm_id_t alarm_id, void* user_param)
 {
-	BT_DBG("__bt_visibility_alarm_cb \n");
+	BT_DBG("__bt_visibility_alarm_cb - alram id = [%d] \n", alarm_id);
+
+	if (alarm_id != visible_timer.alarm_id)
+		return 0;
 
 	/* Switch Off visibility in Bluez */
 	_bt_set_discoverable_mode(BLUETOOTH_DISCOVERABLE_MODE_CONNECTABLE, 0);
@@ -119,10 +127,8 @@ static void __bt_visibility_alarm_create()
 	}
 }
 
-int __bt_set_visible_time(int timeout)
+static void __bt_visibility_alarm_remove()
 {
-	int result;
-
 	if (visible_timer.event_id > 0) {
 		g_source_remove(visible_timer.event_id);
 		visible_timer.event_id = 0;
@@ -132,6 +138,13 @@ int __bt_set_visible_time(int timeout)
 		alarmmgr_remove_alarm(visible_timer.alarm_id);
 		visible_timer.alarm_id = 0;
 	}
+}
+
+int __bt_set_visible_time(int timeout)
+{
+	int result;
+
+	__bt_visibility_alarm_remove();
 
 	visible_timer.timeout = timeout;
 
@@ -241,7 +254,7 @@ static int __bt_get_bonded_device_info(gchar *device_path,
 		name = value ? g_value_get_string(value) : NULL;
 
 		if (name != NULL)
-			BT_DBG("Alias Name [%s]", name);
+			DBG_SECURE("Alias Name [%s]", name);
 		else {
 			value = g_hash_table_lookup(hash, "Name");
 			name = value ? g_value_get_string(value) : NULL;
@@ -308,7 +321,7 @@ static void __bt_flight_mode_cb(keynode_t *node, void *data)
 	gboolean flight_mode = FALSE;
 	int bt_status;
 
-	BT_DBG("key=%s\n", vconf_keynode_get_name(node));
+	DBG_SECURE("key=%s\n", vconf_keynode_get_name(node));
 
 	bt_status = _bt_adapter_get_status();
 
@@ -336,6 +349,47 @@ static void __bt_flight_mode_cb(keynode_t *node, void *data)
 
 			BT_DBG("Activate Bluetooth Service\n");
 			if (vconf_set_int(BT_OFF_DUE_TO_FLIGHT_MODE, 0))
+				BT_DBG("Set vconf failed\n");
+
+			if (bt_status == BT_DEACTIVATED)
+				_bt_enable_adapter();
+		}
+	}
+}
+
+static void __bt_power_saving_mode_cb(keynode_t *node, void *data)
+{
+	int power_saving_mode = 0;
+	int bt_status;
+
+	DBG_SECURE("key=%s\n", vconf_keynode_get_name(node));
+
+	bt_status = _bt_adapter_get_status();
+
+	if (vconf_keynode_get_type(node) == VCONF_TYPE_INT) {
+		power_saving_mode = vconf_keynode_get_int(node);
+
+		BT_DBG("value=%d\n", power_saving_mode);
+
+		if (power_saving_mode > 0) {
+			BT_DBG("Deactivate Bluetooth Service\n");
+			if (vconf_set_int(BT_OFF_DUE_TO_POWER_SAVING_MODE, 1) != 0)
+				BT_ERR("Set vconf failed\n");
+
+			if (bt_status == BT_ACTIVATED)
+				_bt_disable_adapter();
+		} else {
+
+			int value = 0;
+
+			if (vconf_get_int(BT_OFF_DUE_TO_POWER_SAVING_MODE, &value))
+				BT_ERR("Fail get power saving mode value");
+
+			if (value == 0)
+				return;
+
+			BT_DBG("Activate Bluetooth Service\n");
+			if (vconf_set_int(BT_OFF_DUE_TO_POWER_SAVING_MODE, 0))
 				BT_DBG("Set vconf failed\n");
 
 			if (bt_status == BT_DEACTIVATED)
@@ -412,12 +466,12 @@ static void __bt_set_local_name(void)
 
 static int __bt_set_enabled(void)
 {
-	int enabled = FALSE;
+	int enabled = 0;
 	int result = BLUETOOTH_ERROR_NONE;
 
 	_bt_check_adapter(&enabled);
 
-	if (enabled == FALSE) {
+	if (enabled != 1) {
 		BT_ERR("Bluetoothd is not running");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
@@ -440,11 +494,26 @@ static int __bt_set_enabled(void)
 	return BLUETOOTH_ERROR_NONE;
 }
 
-static void __bt_set_disabled(int result)
+void _bt_set_disabled(int result)
 {
-	/* Update Bluetooth Status to notify other modules */
-	if (vconf_set_int(VCONFKEY_BT_STATUS, VCONFKEY_BT_STATUS_OFF) != 0)
-		BT_ERR("Set vconf failed\n");
+	int power_off_status;
+	int ret;
+
+	ret = vconf_get_int(VCONFKEY_SYSMAN_POWER_OFF_STATUS, &power_off_status);
+
+	/* Update the vconf BT status in normal Deactivation case only */
+	if (ret == 0 && power_off_status == VCONFKEY_SYSMAN_POWER_OFF_NONE) {
+
+		BT_DBG("Update vconf for BT normal Deactivation");
+
+		if (result == BLUETOOTH_ERROR_TIMEOUT)
+			if (vconf_set_int(BT_OFF_DUE_TO_TIMEOUT, 1) != 0 )
+				BT_ERR("Set vconf failed\n");
+
+		/* Update Bluetooth Status to notify other modules */
+		if (vconf_set_int(VCONFKEY_BT_STATUS, VCONFKEY_BT_STATUS_OFF) != 0)
+			BT_ERR("Set vconf failed\n");
+	}
 
 	if (vconf_set_int(VCONFKEY_BT_DEVICE, VCONFKEY_BT_DEVICE_NONE) != 0)
 		BT_ERR("Set vconf failed\n");
@@ -467,8 +536,21 @@ void _bt_handle_flight_mode_noti(void)
 	BT_DBG("-");
 }
 
+void _bt_handle_power_saving_mode_noti(void)
+{
+	BT_DBG("+");
+	vconf_notify_key_changed(VCONFKEY_SETAPPL_PSMODE,
+			__bt_power_saving_mode_cb, NULL);
+	BT_DBG("-");
+}
+
 void _bt_handle_adapter_added(void)
 {
+	if (timer_id > 0)
+		g_source_remove(timer_id);
+
+	timer_id = 0;
+
 	 adapter_agent = _bt_create_agent(BT_ADAPTER_AGENT_PATH, TRUE);
 	 if (!adapter_agent) {
 		BT_ERR("Fail to register agent");
@@ -491,6 +573,9 @@ void _bt_handle_adapter_added(void)
 	vconf_notify_key_changed(VCONFKEY_TELEPHONY_FLIGHT_MODE,
 			__bt_flight_mode_cb, NULL);
 
+	vconf_notify_key_changed(VCONFKEY_SETAPPL_PSMODE,
+			__bt_power_saving_mode_cb, NULL);
+
 	__bt_set_enabled();
 
 	__bt_adapter_set_status(BT_ACTIVATED);
@@ -500,15 +585,15 @@ void _bt_handle_adapter_removed(void)
 {
 	__bt_adapter_set_status(BT_DEACTIVATED);
 
+	__bt_visibility_alarm_remove();
+
 	vconf_ignore_key_changed(VCONFKEY_SETAPPL_DEVICE_NAME_STR,
 				(vconf_callback_fn)__bt_phone_name_changed_cb);
 
 	_bt_destroy_agent(adapter_agent);
 	adapter_agent = NULL;
 
-	__bt_set_disabled(BLUETOOTH_ERROR_NONE);
-
-	_bt_terminate_service(NULL);
+	_bt_reliable_terminate_service(NULL);
 }
 
 DBusGProxy *_bt_init_core_proxy(void)
@@ -539,11 +624,15 @@ gboolean __bt_enable_timeout_cb(gpointer user_data)
 {
 	DBusGProxy *proxy;
 
+	BT_DBG("");
+
 	retv_if(_bt_adapter_get_status() == BT_ACTIVATED, FALSE);
+
+	timer_id = 0;
 
 	proxy = __bt_get_core_proxy();
 	if (!proxy)
-		return BLUETOOTH_ERROR_INTERNAL;
+		return FALSE;
 
 	/* Clean up the process */
 	if (dbus_g_proxy_call(proxy, "DisableAdapter", NULL,
@@ -553,7 +642,7 @@ gboolean __bt_enable_timeout_cb(gpointer user_data)
 
 	__bt_adapter_set_status(BT_DEACTIVATED);
 
-	__bt_set_disabled(BLUETOOTH_ERROR_TIMEOUT);
+	_bt_set_disabled(BLUETOOTH_ERROR_TIMEOUT);
 
 	/* Display notification */
 	notification_status_message_post(BT_STR_NOT_SUPPORT);
@@ -612,7 +701,7 @@ int _bt_enable_adapter(void)
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	g_timeout_add(BT_ENABLE_TIMEOUT,
+	timer_id = g_timeout_add(BT_ENABLE_TIMEOUT,
 			(GSourceFunc)__bt_enable_timeout_cb,
 			NULL);
 
@@ -690,7 +779,7 @@ int _bt_check_adapter(int *status)
 	if (!dbus_g_proxy_call(proxy, "DefaultAdapter", NULL,
 			G_TYPE_INVALID, DBUS_TYPE_G_OBJECT_PATH,
 			&adapter_path, G_TYPE_INVALID)) {
-		BT_ERR("Fait to get DefaultAdapter");
+		BT_ERR("Fail to get DefaultAdapter");
 		return BLUETOOTH_ERROR_NONE;
 	}
 
@@ -993,6 +1082,43 @@ int _bt_start_discovery(void)
 	if (!dbus_g_proxy_call(proxy, "StartDiscovery", NULL,
 			       G_TYPE_INVALID, G_TYPE_INVALID)) {
 		BT_ERR("Discover start failed");
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	is_discovering = TRUE;
+	cancel_by_user = FALSE;
+	/* discovery status will be change in event */
+
+	return BLUETOOTH_ERROR_NONE;
+}
+
+int _bt_start_custom_discovery(bt_discovery_role_type_t role)
+{
+	DBusGProxy *proxy;
+
+	const gchar *disc_type;
+
+	if (_bt_is_discovering() == TRUE) {
+		BT_ERR("BT is already in discovering");
+		return BLUETOOTH_ERROR_IN_PROGRESS;
+	}
+
+	proxy = _bt_get_adapter_proxy();
+	retv_if(proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	if (role == DISCOVERY_ROLE_BREDR)
+		disc_type = "BREDR";
+	else if (role == DISCOVERY_ROLE_LE)
+		disc_type = "LE";
+	else if (role == DISCOVERY_ROLE_LE_BREDR)
+		disc_type = "LE_BREDR";
+	else
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+
+	if (!dbus_g_proxy_call(proxy, "StartCustomDiscovery", NULL,
+			 G_TYPE_STRING, disc_type,
+			       G_TYPE_INVALID, G_TYPE_INVALID)) {
+		BT_ERR("StartCustomDiscovery failed");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 

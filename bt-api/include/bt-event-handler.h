@@ -32,14 +32,24 @@ extern "C" {
 	"interface='%s'," \
 	"path='%s'"
 
+#ifdef __ENABLE_GDBUS__
 typedef struct {
 	int event_type;
+	guint id;
+	GDBusConnection *conn;
+	void *cb;
+	void *user_data;
+} bt_event_info_t;
+#else
+typedef struct {
+	int event_type;
+	guint id;
 	DBusConnection *conn;
 	DBusHandleMessageFunction func;
 	void *cb;
 	void *user_data;
 } bt_event_info_t;
-
+#endif
 
 int _bt_init_event_handler(void);
 
@@ -58,6 +68,10 @@ void _bt_add_push_request_id(int request_id);
 void _bt_set_obex_server_id(int server_type);
 
 int _bt_get_obex_server_id(void);
+
+void _bt_register_name_owner_changed(void);
+
+void _bt_unregister_name_owner_changed(void);
 
 #ifdef __cplusplus
 }

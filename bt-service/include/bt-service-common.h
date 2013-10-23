@@ -39,6 +39,9 @@ extern "C" {
 #define BT_ERR(fmt, args...) \
         SLOGE(fmt, ##args)
 
+#define DBG_SECURE(fmt, args...) SECURE_SLOGD(fmt, ##args)
+#define ERR_SECURE(fmt, args...) SECURE_SLOGE(fmt, ##args)
+
 #define ret_if(expr) \
 	do { \
 		if (expr) { \
@@ -74,7 +77,7 @@ extern "C" {
 #define BT_AGENT_NEW_LINE "\r\n"
 
 #define BT_MAX_DBUS_TIMEOUT 45000
-#define BT_ENABLE_TIMEOUT 5000 /* 5 seconds */
+#define BT_ENABLE_TIMEOUT 10000 /* 10 seconds */
 #define BT_DISCOVERY_FINISHED_DELAY 200
 
 #define MANAGER_EVENT_MATCH_RULE \
@@ -154,6 +157,7 @@ typedef struct {
 	gboolean paired;
 	gboolean connected;
 	gboolean trust;
+	unsigned char device_type;
 } bt_remote_dev_info_t;
 
 /* RFCOMM client /server will use this structure*/

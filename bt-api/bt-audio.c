@@ -29,6 +29,10 @@ BT_EXPORT_API int bluetooth_audio_init(bt_audio_func_ptr cb, void *user_data)
 {
 	int ret;
 
+	if (cb == NULL) {
+		BT_ERR("callback is NULL");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 	ret = _bt_init_event_handler();
 
 	if (ret != BLUETOOTH_ERROR_NONE &&
@@ -40,7 +44,11 @@ BT_EXPORT_API int bluetooth_audio_init(bt_audio_func_ptr cb, void *user_data)
 	_bt_set_user_data(BT_AUDIO, (void *)cb, user_data);
 
 	/* Register All events */
-	_bt_register_event(BT_HEADSET_EVENT , (void *)cb, user_data);
+	ret = _bt_register_event(BT_HEADSET_EVENT, (void *)cb, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE) {
+		_bt_deinit_event_handler();
+		return ret;
+	}
 
 	return BLUETOOTH_ERROR_NONE;
 }
@@ -62,11 +70,11 @@ BT_EXPORT_API int bluetooth_audio_connect(bluetooth_device_address_t *remote_add
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 
@@ -87,11 +95,11 @@ BT_EXPORT_API int bluetooth_audio_disconnect(bluetooth_device_address_t *remote_
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 
@@ -112,11 +120,11 @@ BT_EXPORT_API int bluetooth_ag_connect(bluetooth_device_address_t *remote_addres
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 
@@ -137,11 +145,11 @@ BT_EXPORT_API int bluetooth_ag_disconnect(bluetooth_device_address_t *remote_add
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 
@@ -162,11 +170,11 @@ BT_EXPORT_API int bluetooth_av_connect(bluetooth_device_address_t *remote_addres
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 
@@ -187,11 +195,11 @@ BT_EXPORT_API int bluetooth_av_disconnect(bluetooth_device_address_t *remote_add
 	BT_CHECK_PARAMETER(remote_address, return);
 	BT_CHECK_ENABLED(return);
 
+	user_info = _bt_get_user_data(BT_AUDIO);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
-
-	user_info = _bt_get_user_data(BT_AUDIO);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	g_array_append_vals(in_param1, remote_address, sizeof(bluetooth_device_address_t));
 

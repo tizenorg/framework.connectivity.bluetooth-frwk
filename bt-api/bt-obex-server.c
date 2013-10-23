@@ -40,7 +40,7 @@ BT_EXPORT_API int bluetooth_obex_server_init(const char *dst_path)
 		return BLUETOOTH_ERROR_AGENT_ALREADY_EXIST;
 
 	user_info = _bt_get_user_data(BT_COMMON);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
@@ -112,7 +112,7 @@ BT_EXPORT_API int bluetooth_obex_server_init_without_agent(const char *dst_path)
 		return BLUETOOTH_ERROR_AGENT_ALREADY_EXIST;
 
 	user_info = _bt_get_user_data(BT_COMMON);
-	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+	retv_if(user_info->cb == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);

@@ -135,6 +135,9 @@ extern "C" {
 #define BLUETOOTH_ERROR_ALREADY_INITIALIZED    ((int)BLUETOOTH_ERROR_BASE - 0x23)
 								/**< Already initialized */
 
+#define BLUETOOTH_ERROR_PERMISSION_DEINED    ((int)BLUETOOTH_ERROR_BASE - 0x24)
+								/**< Permission deined */
+
 
 /**
  * This is Bluetooth device address type, fixed to 6 bytes ##:##:##:##:##:##
@@ -192,6 +195,7 @@ typedef enum {
 	BLUETOOTH_A2DP_SERVICE = 0x02,
 	BLUETOOTH_HSP_SERVICE = 0x04,
 	BLUETOOTH_HID_SERVICE = 0x08,
+	BLUETOOTH_NAP_SERVICE = 0x10,
 } bluetooth_service_type_t;
 
 #define BLUETOOTH_EVENT_BASE            ((int)(0x0000))		/**< No event */
@@ -286,12 +290,19 @@ typedef enum {
 	BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_PROGRESS,/* Obex Server transfer progress event*/
 	BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_COMPLETED,/* Obex Server transfer complete event*/
 	BLUETOOTH_EVENT_OBEX_SERVER_CONNECTION_AUTHORIZE,
+	BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_CONNECTED, /* OPC Transfer connected event */
+	BLUETOOTH_EVENT_OBEX_SERVER_TRANSFER_DISCONNECTED, /* OPC Transfer disconnected event */
 
 	BLUETOOTH_EVENT_GATT_SVC_CHAR_DISCOVERED = BLUETOOTH_EVENT_GATT_BASE,
 				/**<Discovered GATT service characteristics event*/
 	BLUETOOTH_EVENT_GATT_CHAR_VAL_CHANGED,
 				/**<Remote GATT charateristic value changed event*/
 	BLUETOOTH_EVENT_GATT_GET_CHAR_FROM_UUID,
+	BLUETOOTH_EVENT_GATT_CONNECTED,/**<Gatt connected event */
+	BLUETOOTH_EVENT_GATT_DISCONNECTED, /**<Gatt Disconnected event */
+	BLUETOOTH_EVENT_GATT_RSSI, /**<Get RSSI value for remote device */
+	BLUETOOTH_EVENT_GATT_READ_CHAR, /**<Gatt Read Characteristic Value */
+	BLUETOOTH_EVENT_GATT_WRITE_CHAR, /**<Gatt Write Characteristic Value */
 
 	BLUETOOTH_EVENT_AG_CONNECTED = BLUETOOTH_EVENT_AUDIO_BASE, /**<AG service connected event*/
 	BLUETOOTH_EVENT_AG_DISCONNECTED, /**<AG service disconnected event*/
@@ -551,6 +562,15 @@ typedef struct {
 } bluetooth_device_class_t;
 
 /**
+ * Discovery Role types
+ */
+typedef enum {
+	DISCOVERY_ROLE_BREDR = 0x1,
+	DISCOVERY_ROLE_LE,
+	DISCOVERY_ROLE_LE_BREDR
+} bt_discovery_role_type_t;
+
+/**
 * structure to hold the device information
 */
 typedef struct {
@@ -564,6 +584,7 @@ typedef struct {
 	gboolean paired;		/**< paired flag */
 	gboolean connected;	/**< connected flag */
 	gboolean trust;		/**< connected flag */
+	unsigned char device_type;
 } bluetooth_device_info_t;
 
 /**
@@ -725,15 +746,25 @@ typedef struct {
 } bt_obex_server_authorize_into_t;
 
 /**
+ * Server type
+ */
+typedef enum {
+	OPP_SERVER = 0x0,
+	FTP_SERVER
+} bt_obex_server_type_t;
+
+/**
  * Stucture to OPP/FTP server transfer information
  */
 typedef struct {
 	char *filename;
 	char *device_name;
+	char *file_path;
 	char *type;
 	int transfer_id;
 	unsigned long file_size;
 	int percentage;
+	bt_obex_server_type_t server_type;
 } bt_obex_server_transfer_info_t;
 
 /**
@@ -1347,16 +1378,16 @@ int bluetooth_get_timeout_value(int *timeout);
 /**
  * @fn int bluetooth_start_discovery(unsigned short max_response, unsigned short discovery_duration,
  *					unsigned int  classOfDeviceMask)
- * @brief Start the device discovery
+ * @brief Start the generic device discovery which finds both the BR/EDR and LE devices.
  *
  * To connect connect to peer bluetooth device, you will need to know its bluetooth address and its
  * name. You can search for Bluetooth devices in vicinity by bluetooth_start_discovery() API. It
- * first performs an inquiry. For each device found from the inquiry it gets the remote name of the
- * device. Bluetooth device address and name are given to Application via
- * BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND event. In param_data of bluetooth_event_param_t, you will
- * receive a pointer to a structure of bluetooth_device_info_t type. you will receive device
- * address, device name, device class, rssi (received signal strength indicator). please see
- * bluetooth_device_info_t for more details.
+ * first performs an inquiry and try to find both the BREDR and LE devices. For each device found
+ * from the inquiry it gets the remote name of the device. Bluetooth device address and name are
+ * given to Application via BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND event. In param_data of
+ * bluetooth_event_param_t, you will receive a pointer to a structure of bluetooth_device_info_t type.
+ * You will receive device address, device name, device class, rssi (received signal strength indicator).
+ * please see bluetooth_device_info_t for more details.
  *
  *
  * This API provides searching options like max responses, discovery duration in seconds and class
@@ -1369,7 +1400,7 @@ int bluetooth_get_timeout_value(int *timeout);
  * Also note that search will end after 180 seconds automatically if you pass 0 in discovery
  * duration.
  *
- * sometimes user may want to search for a perticular kind of device. for ex, mobile or pc. in such
+ * Sometimes user may want to search for a particular kind of device. for ex, mobile or pc. in such
  * case, you can use classOfDeviceMask parameter. please see bluetooth_device_service_class_t,
  * bluetooth_device_major_class_t and bluetooth_device_minor_class_t enums
  *
@@ -1378,8 +1409,7 @@ int bluetooth_get_timeout_value(int *timeout);
  * through registered callback function.
  *
  * The discovery is responded by an BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND event for each device it
- * finds and an BLUETOOTH_EVENT_REMOTE_DEVICE_NAME_UPDATED event for each fount device its name
- * finds.
+ * found and a BLUETOOTH_EVENT_REMOTE_DEVICE_NAME_UPDATED event for its name updation.
  *
  * The completion or cancellation of the discovery is indicated by an
  * BLUETOOTH_EVENT_DISCOVERY_FINISHED event.
@@ -1399,7 +1429,7 @@ int bluetooth_get_timeout_value(int *timeout);
  * @param[in] classOfDeviceMask		define classes of the device mask which user wants
 					(refer to class of device)
  * @remark      None
- * @see         bluetooth_cancel_discovery, bluetooth_device_info_t
+ * @see         bluetooth_start_custom_discovery(), bluetooth_cancel_discovery, bluetooth_device_info_t
 
 @code
 void bt_event_callback(int event, bluetooth_event_param_t *param)
@@ -1466,6 +1496,70 @@ ret = bluetooth_start_discovery(max_response,discovery_duration,classOfDeviceMas
 int bluetooth_start_discovery(unsigned short max_response,
 				      unsigned short discovery_duration,
 				      unsigned int classOfDeviceMask);
+
+/**
+ * @fn int bluetooth_start_custom_discovery(bt_discovery_role_type_t role
+ *					unsigned short max_response,
+ *					unsigned short discovery_duration,
+ *					unsigned int  classOfDeviceMask)
+ * @brief Start the custom device discovery with specific type such as BR/EDR, LE, LE+BR/EDR etc.
+ *
+ * Sometimes user may want to search for a particular kind of device. for ex, LE only or BR/EDR only.
+ * In such case, you can use type parameter. This API is similar to that of bluetooth_start_discovery().
+ * Please see bluetooth_start_discovery() for other parameters description.
+ *
+ * This function is a asynchronous call.
+ * If the call is success then the application will receive BLUETOOTH_EVENT_DISCOVERY_STARTED event
+ * through registered callback function.
+ *
+ * The discovery is responded by an BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND event for each device it
+ * found and a BLUETOOTH_EVENT_REMOTE_DEVICE_NAME_UPDATED event for its name updation.
+ *
+ * The completion or cancellation of the discovery is indicated by an
+ * BLUETOOTH_EVENT_DISCOVERY_FINISHED event.
+ *
+ * The device discovery can be cancelled by calling bluetooth_stop_discovery().
+ *
+ *
+ * @return	BLUETOOTH_ERROR_NONE - Success \n
+ *		BLUETOOTH_ERROR_DEVICE_NOT_ENABLED - Bluetooth adapter is not enabled \n
+ *		BLUETOOTH_ERROR_INVALID_PARAM - Invalid parameter \n
+ *		BLUETOOTH_ERROR_IN_PROGRESS - Bluetooth adapter is busy with another discovery \n
+ *		BLUETOOTH_ERROR_INTERNAL - System error like heap full has occured or bluetooth
+						agent is not running \n
+ *
+ * @param[in] role		define the role type of devices to be discovered. See enum bt_discovery_role_type_t.
+					(DISCOVERY_ROLE_BREDR means BREDR only, DISCOVERY_ROLE_LE mean Low Energy only,
+					DISCOVERY_ROLE_LE_BREDR means LE & BREDR - same as bluetooth_start_discovery())
+ * @param[in] max_response		define the maximum response of the number of founded devices
+					(0 means unlimited)
+ * @param[in] discovery_duration	define bluetooth discovery duration (0 means 180s )
+ * @param[in] classOfDeviceMask		define classes of the device mask which user wants
+					(refer to class of device)
+ * @remark      None
+ * @see         bluetooth_start_discovery(), bluetooth_cancel_discovery, bluetooth_device_info_t
+
+@code
+unsigned short type;
+unsigned short max_response;
+unsigned short discovery_duration;
+unsigned classOfDeviceMask;
+int ret = 0;
+
+type = 1;
+max_response =0;
+discovery_duration =0;
+classOfDeviceMask =0;
+
+ret = bluetooth_start_custom_discovery(type, max_response, discovery_duration, classOfDeviceMask);
+
+@endcode
+ *
+ */
+int bluetooth_start_custom_discovery(bt_discovery_role_type_t role,
+						unsigned short max_response,
+						unsigned short discovery_duration,
+						unsigned int classOfDeviceMask);
 
 /**
  * @fn int bluetooth_cancel_discovery (void)
@@ -2510,6 +2604,26 @@ int bluetooth_network_connect(const bluetooth_device_address_t *device_address,
  */
 int bluetooth_network_disconnect(const bluetooth_device_address_t *device_address);
 
+/**
+ * @fn int bluetooth_network_server_disconnect(const bluetooth_device_address_t *device_address)
+ * @brief Disconnect the device from the network
+ *
+ * This function is an asynchronous call.
+ * The network server disconnect request is responded by
+ * BLUETOOTH_EVENT_NETWORK_SERVER_DISCONNECTED event.
+ *
+ * @return   BLUETOOTH_ERROR_NONE  - Success \n
+ *              BLUETOOTH_ERROR_INVALID_PARAM - Invalid parameter \n
+ *              BLUETOOTH_ERROR_INTERNAL - Internal Error \n
+ *              BLUETOOTH_ERROR_DEVICE_NOT_ENABLED - Not enabled \n
+ *
+ * @exception   None
+ * @param[in]   device_address   This indicates an address of the connected client device
+ * @remark       None
+ * @see		bluetooth_network_activate_server
+ */
+int bluetooth_network_server_disconnect(const bluetooth_device_address_t *device_address);
+
 /*HDP - API's*/
 
 /**
@@ -3245,7 +3359,8 @@ int bluetooth_gatt_get_characteristics_property(const char *char_handle,
 
 /**
  * @fn int bluetooth_gatt_set_characteristics_value(const char *char_handle,
- *						const guint8 *value, int length)
+ *						const guint8 *value, int lengthi,
+ *						guint8 request)
  *
  * @brief Set characteristic value.
  *
@@ -3260,12 +3375,16 @@ int bluetooth_gatt_get_characteristics_property(const char *char_handle,
  * @param[in]	char_handle - Handle for Characteristic property.
  * @param[in]	value - New value to set for characteristic property.
  * @param[in]	length - Length of the value to be set.
+ * @param[in]   request - TRUE for request and FALSE for command.
  *
  * @remark	None
  * @see		None
  */
 int bluetooth_gatt_set_characteristics_value(const char *char_handle,
-						const guint8 *value, int length);
+						const guint8 *value, int length,
+						guint8 request);
+
+int bluetooth_gatt_read_characteristic_value(const char *char_handle);
 
 /**
  * @fn int bluetooth_gatt_get_service_from_uuid(bluetooth_device_address_t *address,
@@ -3374,6 +3493,11 @@ int bluetooth_gatt_free_service_property(bt_gatt_service_property_t *svc_pty);
  */
  int bluetooth_gatt_free_char_property(bt_gatt_char_property_t *char_pty);
 
+int bluetooth_connect_le(const bluetooth_device_address_t *device_address);
+
+int bluetooth_disconnect_le(const bluetooth_device_address_t *device_address);
+
+int bluetooth_read_rssi(const bluetooth_device_address_t *device_address);
 /**
  * @}
  */
