@@ -76,6 +76,9 @@ BT_EXPORT_API int bluetooth_enable_adapter(void)
 {
 	int result;
 
+	retv_if(bluetooth_is_supported() <= 0,
+				BLUETOOTH_ERROR_NOT_SUPPORT);
+
 	retv_if(bluetooth_check_adapter() == BLUETOOTH_ADAPTER_ENABLED,
 				BLUETOOTH_ERROR_DEVICE_ALREADY_ENABLED);
 
