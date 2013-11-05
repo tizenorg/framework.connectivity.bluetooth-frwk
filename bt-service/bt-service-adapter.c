@@ -478,8 +478,6 @@ static int __bt_set_enabled(void)
 
 	__bt_set_visible_mode();
 
-	__bt_set_local_name();
-
 	/* Update Bluetooth Status to notify other modules */
 	if (vconf_set_int(VCONFKEY_BT_STATUS, VCONFKEY_BT_STATUS_ON) != 0)
 		BT_ERR("Set vconf failed\n");
@@ -546,6 +544,8 @@ void _bt_handle_power_saving_mode_noti(void)
 
 void _bt_handle_adapter_added(void)
 {
+	__bt_set_local_name();
+
 	if (timer_id > 0)
 		g_source_remove(timer_id);
 

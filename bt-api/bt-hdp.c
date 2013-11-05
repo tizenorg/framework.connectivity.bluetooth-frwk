@@ -289,8 +289,6 @@ static int __bt_hdp_internal_add_filter(void)
 	if (dbus_connection_add_filter(g_hdp_dus_conn,
 			__bt_hdp_internal_event_filter, NULL, NULL) != TRUE) {
 		BT_ERR("Fail to add dbus filter");
-		return BLUETOOTH_ERROR_INTERNAL;
-
 	}
 
 	dbus_bus_add_match(g_hdp_dus_conn,
