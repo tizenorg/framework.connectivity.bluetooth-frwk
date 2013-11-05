@@ -33,7 +33,7 @@
 #include "bt-event-handler.h"
 #include "bt-request-sender.h"
 
-#define BT_RELIABLE_DISABLE_TIME 300 /* 300 ms */
+#define BT_RELIABLE_DISABLE_TIME 500 /* 500 ms */
 
 typedef struct {
 	int server_fd;
