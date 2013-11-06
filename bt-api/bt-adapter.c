@@ -58,6 +58,19 @@ static int __bt_fill_device_list(GArray *out_param2, GPtrArray **dev_list)
 	return BLUETOOTH_ERROR_NONE;
 }
 
+static gboolean bluetooth_check_enable_value(void)
+{
+	int status;
+
+	if (vconf_get_int(VCONFKEY_BT_STATUS, &status) != 0) {
+		BT_ERR("Fail to get the enabled value");
+		return TRUE;
+	}
+
+	return (status & VCONFKEY_BT_STATUS_ON) ? TRUE :
+						FALSE;
+}
+
 BT_EXPORT_API int bluetooth_check_adapter(void)
 {
 	int ret;
@@ -68,8 +81,13 @@ BT_EXPORT_API int bluetooth_check_adapter(void)
 	ret = _bt_get_adapter_path(_bt_get_system_gconn(), NULL);
 #endif
 
-	return ret == BLUETOOTH_ERROR_NONE ? BLUETOOTH_ADAPTER_ENABLED :
-						BLUETOOTH_ADAPTER_DISABLED;
+	/* To resolve TCT Fail issue */
+	if (ret != BLUETOOTH_ERROR_NONE ||
+	     bluetooth_check_enable_value() == FALSE) {
+		return BLUETOOTH_ADAPTER_DISABLED;
+	}
+
+	return BLUETOOTH_ADAPTER_ENABLED;
 }
 
 BT_EXPORT_API int bluetooth_enable_adapter(void)

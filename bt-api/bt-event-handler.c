@@ -33,7 +33,7 @@
 #include "bt-event-handler.h"
 #include "bt-request-sender.h"
 
-#define BT_RELIABLE_DISABLE_TIME 500 /* 500 ms */
+#define BT_RELIABLE_DISABLE_TIME 600 /* 600 ms */
 
 typedef struct {
 	int server_fd;
@@ -373,11 +373,16 @@ void __bt_adapter_event_filter(GDBusConnection *connection,
 				result, adapter_name,
 				event_info->cb, event_info->user_data);
 	} else if (strcasecmp(signal_name, BT_DISCOVERY_STARTED) == 0) {
+		BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_STARTED");
+
 		_bt_common_event_cb(BLUETOOTH_EVENT_DISCOVERY_STARTED,
 				BLUETOOTH_ERROR_NONE, NULL,
 				event_info->cb, event_info->user_data);
 	} else if (strcasecmp(signal_name, BT_DISCOVERY_FINISHED) == 0) {
 		g_variant_get(parameters, "(i)", &result);
+
+		BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_FINISHED");
+
 		_bt_common_event_cb(BLUETOOTH_EVENT_DISCOVERY_FINISHED,
 				result, NULL,
 				event_info->cb, event_info->user_data);
@@ -393,6 +398,10 @@ void __bt_adapter_event_filter(GDBusConnection *connection,
 			event = BLUETOOTH_EVENT_REMOTE_DEVICE_NAME_UPDATED;
 		else
 			event = BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND;
+
+
+		BT_DBG("TCT_BT: BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND");
+		BT_DBG("TCT_BT: name: %s", device_info->device_name.name);
 
 		_bt_common_event_cb(event,
 				result, device_info,

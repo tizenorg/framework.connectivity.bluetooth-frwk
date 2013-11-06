@@ -289,6 +289,12 @@ gboolean _bt_discovery_finished_cb(gpointer user_data)
 
 		_bt_set_cancel_by_user(FALSE);
 		_bt_set_discovery_status(FALSE);
+
+		if (result == BLUETOOTH_ERROR_CANCEL_BY_USER)
+			BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_FINISHED: CANCEL_BY_USER");
+		else
+			BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_FINISHED");
+
 		_bt_send_event(BT_ADAPTER_EVENT,
 			BLUETOOTH_EVENT_DISCOVERY_FINISHED,
 			DBUS_TYPE_INT32, &result,
@@ -333,6 +339,8 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 
 			/* Send event to application */
 			if (discovering == TRUE) {
+				BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_STARTED");
+
 				_bt_set_discovery_status(TRUE);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_DISCOVERY_STARTED,
@@ -340,6 +348,12 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 					DBUS_TYPE_INVALID);
 			} else {
 				ret_if(event_id > 0);
+
+				if (_bt_get_cancel_by_user() == TRUE) {
+					BT_DBG("TCT_BT: Cancel by user, so don't call stop discovery");
+					_bt_discovery_finished_cb(NULL);
+					return;
+				}
 
 				adapter_proxy = _bt_get_adapter_proxy();
 				ret_if(adapter_proxy == NULL);
@@ -439,8 +453,6 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 		const char *bdaddr;
 		bt_remote_dev_info_t *dev_info;
 
-		ret_if(_bt_is_discovering() == FALSE);
-
 		dev_info = g_malloc0(sizeof(bt_remote_dev_info_t));
 
 		dbus_message_iter_init(msg, &item_iter);
@@ -457,6 +469,9 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 
 		if (dev_info->name == NULL)
 			dev_info->name = g_strdup("");
+
+		BT_DBG("TCT_BT: BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND");
+		BT_DBG("TCT_BT: name: %s", dev_info->name);
 
 		_bt_send_event(BT_ADAPTER_EVENT,
 			BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND,
