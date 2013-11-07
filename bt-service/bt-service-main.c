@@ -33,6 +33,10 @@
 #include "bt-request-handler.h"
 #include "bt-service-adapter.h"
 
+#include <sys/file.h>
+#include <errno.h>
+#define LOCK_BT_SERVICE "/tmp/lock_bt_service"
+
 static GMainLoop *main_loop;
 static gboolean terminated;
 
@@ -191,10 +195,61 @@ static gboolean __bt_check_bt_service(void *data)
 	return FALSE;
 }
 
+static int __lock_bt_service(void)
+{
+	int fd;
+	int ret;
+
+	fd = open(LOCK_BT_SERVICE, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+	if (fd == -1) {
+		BT_ERR("FAIL: open(%s)", LOCK_BT_SERVICE);
+		return -1;
+	}
+
+	ret = flock(fd, LOCK_EX | LOCK_NB);
+	if (ret == -1) {
+		BT_DBG("FAIL: flock(fd, LOCK_EX | LOCK_NB), errno: %d", errno);
+		close(fd);
+		return -1;
+	}
+
+	return fd;
+}
+
+static int __unlock_bt_service(int fd)
+{
+	int ret;
+
+	if (fd == -1) return -1;
+
+	ret = flock(fd, LOCK_UN);
+
+	if (ret == -1) {
+		BT_ERR("FAIL: flock(fd, LOCK_UN)");
+		close(fd);
+		return -1;
+	}
+
+	close(fd);
+
+	return 0;
+}
+
 int main(void)
 {
 	struct sigaction sa;
+	int ret, fd;
 	BT_DBG("Starting the bt-service daemon");
+	BT_DBG("TCT_BT: Starting the bt-service daemon");
+	BT_DBG("TCT_BT: Apply Lock in bt-service");
+
+	fd = __lock_bt_service();
+	if (fd == -1) {
+		BT_ERR("TCT_BT: FAIL: __lock_bt_service()");
+		return -1;
+	}
+
+	BT_DBG("TCT_BT: After setting service_running");
 
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = __bt_sigterm_handler;
@@ -210,18 +265,18 @@ int main(void)
 	/* Event reciever Init */
 	if (_bt_init_service_event_receiver() != BLUETOOTH_ERROR_NONE) {
 		BT_ERR("Fail to init event reciever");
-		return 0;
+		goto unlock;
 	}
 
 	/* Event sender Init */
 	if (_bt_init_service_event_sender() != BLUETOOTH_ERROR_NONE) {
 		BT_ERR("Fail to init event sender");
-		return 0;
+		goto unlock;
 	}
 
 	if (_bt_service_register() != BLUETOOTH_ERROR_NONE) {
 		BT_ERR("Fail to register service");
-		return 0;
+		goto unlock;
 	}
 
 	_bt_init_request_id();
@@ -247,6 +302,15 @@ int main(void)
 
 	if (terminated == FALSE)
 		__bt_release_service();
+
+	BT_DBG("TCT_BT: Terminated the bt-service daemon");
+
+unlock:
+	BT_DBG("TCT_BT: unlock");
+
+	ret = __unlock_bt_service(fd);
+	if (ret < 0)
+		BT_ERR("TCT_BT: FAIL: __unlock_bt_service(fd)");
 
 	return 0;
 }

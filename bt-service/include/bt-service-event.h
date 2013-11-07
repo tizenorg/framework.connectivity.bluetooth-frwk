@@ -34,6 +34,7 @@ void _bt_deinit_service_event_sender(void);
 int _bt_init_service_event_receiver(void);
 void _bt_deinit_service_event_reciever(void);
 
+void _bt_reset_retry_discovery(void);
 
 #ifdef __cplusplus
 }

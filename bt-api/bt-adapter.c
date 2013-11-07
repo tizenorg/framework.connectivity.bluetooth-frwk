@@ -84,8 +84,11 @@ BT_EXPORT_API int bluetooth_check_adapter(void)
 	/* To resolve TCT Fail issue */
 	if (ret != BLUETOOTH_ERROR_NONE ||
 	     bluetooth_check_enable_value() == FALSE) {
+		BT_DBG("TCT_BT: BLUETOOTH_ADAPTER_DISABLED");
 		return BLUETOOTH_ADAPTER_DISABLED;
 	}
+
+	BT_DBG("TCT_BT: BLUETOOTH_ADAPTER_ENABLED");
 
 	return BLUETOOTH_ADAPTER_ENABLED;
 }
@@ -93,6 +96,8 @@ BT_EXPORT_API int bluetooth_check_adapter(void)
 BT_EXPORT_API int bluetooth_enable_adapter(void)
 {
 	int result;
+
+	BT_DBG("TCT_BT: Call bluetooth_enable_adapter");
 
 	retv_if(bluetooth_is_supported() <= 0,
 				BLUETOOTH_ERROR_NOT_SUPPORT);
@@ -114,6 +119,8 @@ BT_EXPORT_API int bluetooth_enable_adapter(void)
 BT_EXPORT_API int bluetooth_disable_adapter(void)
 {
 	int result;
+
+	BT_DBG("TCT_BT: Call bluetooth_disable_adapter");
 
 	BT_CHECK_ENABLED(return);
 
@@ -331,6 +338,8 @@ BT_EXPORT_API int bluetooth_start_discovery(unsigned short max_response,
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
+	BT_DBG("TCT_BT: bluetooth_start_discovery");
+
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_START_DISCOVERY,
 		in_param1, in_param2, in_param3, in_param4, &out_param);
 
@@ -351,6 +360,8 @@ BT_EXPORT_API int bluetooth_start_custom_discovery(bt_discovery_role_type_t role
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
+	BT_DBG("TCT_BT: bluetooth_start_custom_discovery");
+
 	g_array_append_vals(in_param1, &role, sizeof(bt_discovery_role_type_t));
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_START_CUSTOM_DISCOVERY,
 		in_param1, in_param2, in_param3, in_param4, &out_param);
@@ -368,6 +379,8 @@ BT_EXPORT_API int bluetooth_cancel_discovery(void)
 
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	BT_DBG("TCT_BT: bluetooth_cancel_discovery");
 
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_CANCEL_DISCOVERY,
 		in_param1, in_param2, in_param3, in_param4, &out_param);

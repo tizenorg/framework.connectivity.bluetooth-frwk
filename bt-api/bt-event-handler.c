@@ -281,6 +281,8 @@ gboolean __bt_reliable_disable_cb(gpointer user_data)
 {
 	bt_event_info_t *event_info = user_data;
 
+	BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISABLED");
+
 	if (is_initialized != FALSE) {
 		_bt_common_event_cb(BLUETOOTH_EVENT_DISABLED,
 				BLUETOOTH_ERROR_NONE, NULL,
@@ -2948,6 +2950,7 @@ static void __bt_name_owner_changed(GDBusConnection *connection,
 	if (g_strcmp0(name, BT_DBUS_NAME) == 0 &&
 			(new_owner != NULL && *new_owner == '\0')) {
 		BT_DBG("bt-service is terminated abnormally");
+		BT_DBG("TCT_BT: bt-service is terminated");
 		event_info = __bt_event_get_cb_data(BT_ADAPTER_EVENT);
 		if (event_info == NULL)
 			return;

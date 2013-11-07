@@ -25,6 +25,7 @@
 #include <dlog.h>
 #include <vconf.h>
 #include <vconf-internal-bt-keys.h>
+#include <time.h>
 
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
@@ -48,8 +49,7 @@
 
 static DBusGConnection *manager_conn;
 static DBusGConnection *obexd_conn;
-
-static guint event_id;
+static gboolean retry_discovery;
 
 /**
  * obexd connection type
@@ -280,7 +280,6 @@ void __bt_set_device_values(gboolean connected, int state)
 gboolean _bt_discovery_finished_cb(gpointer user_data)
 {
 	int result = BLUETOOTH_ERROR_NONE;
-	event_id = 0;
 
 	if (_bt_get_discoverying_property() == FALSE) {
 		if (_bt_get_cancel_by_user() == TRUE) {
@@ -314,6 +313,9 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 	GValue timeout = { 0 };
 	const char *member = dbus_message_get_member(msg);
 	const char *property = NULL;
+	static time_t disc_start;
+	static time_t disc_end;
+	int diff_time;
 
 	ret_if(member == NULL);
 
@@ -341,22 +343,61 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			if (discovering == TRUE) {
 				BT_DBG("TCT_BT: BLUETOOTH_EVENT_DISCOVERY_STARTED");
 
+				/* Ignore this event at 1 time */
+				if (retry_discovery == TRUE) {
+					BT_DBG("TCT_BT: Ignore First Event");
+					retry_discovery = FALSE;
+					return;
+				}
+
+				time(&disc_start);
+
 				_bt_set_discovery_status(TRUE);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_DISCOVERY_STARTED,
 					DBUS_TYPE_INT32, &result,
 					DBUS_TYPE_INVALID);
 			} else {
-				ret_if(event_id > 0);
-
 				if (_bt_get_cancel_by_user() == TRUE) {
 					BT_DBG("TCT_BT: Cancel by user, so don't call stop discovery");
 					_bt_discovery_finished_cb(NULL);
+					disc_start = 0;
+					disc_end = 0;
+					retry_discovery = FALSE;
 					return;
 				}
 
 				adapter_proxy = _bt_get_adapter_proxy();
 				ret_if(adapter_proxy == NULL);
+
+				if (disc_start > 0) {
+					time(&disc_end);
+
+					diff_time = difftime(disc_end, disc_start);
+					BT_DBG("TCT_BT: diff_time: %ld", diff_time);
+
+					disc_start = 0;
+					disc_end = 0;
+
+					/* Within 1 second */
+					if (diff_time <= 1) {
+						gchar *disc_type = _bt_get_discovery_role();
+
+						BT_DBG("TCT_BT: Discovery with 1 second!!!");
+
+						if (!dbus_g_proxy_call(adapter_proxy, "StartCustomDiscovery",
+								NULL, G_TYPE_STRING, disc_type,
+								       G_TYPE_INVALID, G_TYPE_INVALID)) {
+							BT_ERR("StartCustomDiscovery failed");
+							_bt_discovery_finished_cb(NULL);
+						} else {
+							BT_DBG("TCT_BT: Retry discovery");
+							retry_discovery = TRUE;
+						}
+						BT_DBG("TCT_BT: Ignore Finished event");
+						return;
+					}
+				}
 
 				/* Need to stop searching */
 				dbus_g_proxy_call(adapter_proxy,
@@ -365,8 +406,7 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 							G_TYPE_INVALID,
 							G_TYPE_INVALID);
 
-				event_id = g_timeout_add(BT_DISCOVERY_FINISHED_DELAY,
-					      (GSourceFunc)_bt_discovery_finished_cb, NULL);
+				_bt_discovery_finished_cb(NULL);
 			}
 		} else if (strcasecmp(property, "Name") == 0) {
 			char *name = NULL;
@@ -471,7 +511,6 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			dev_info->name = g_strdup("");
 
 		BT_DBG("TCT_BT: BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND");
-		BT_DBG("TCT_BT: name: %s", dev_info->name);
 
 		_bt_send_event(BT_ADAPTER_EVENT,
 			BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND,
@@ -1605,7 +1644,9 @@ void _bt_deinit_service_event_reciever(void)
 		dbus_g_connection_unref(obexd_conn);
 		obexd_conn = NULL;
 	}
+}
 
-	if (event_id > 0)
-		g_source_remove(event_id);
+void _bt_reset_retry_discovery(void)
+{
+	retry_discovery = FALSE;
 }

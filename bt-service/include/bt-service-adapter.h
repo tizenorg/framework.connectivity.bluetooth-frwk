@@ -78,6 +78,8 @@ int _bt_get_timeout_value(int *timeout);
 
 gboolean _bt_is_discovering(void);
 
+gchar *_bt_get_discovery_role(void);
+
 gboolean _bt_get_cancel_by_user(void);
 
 void _bt_set_cancel_by_user(gboolean value);

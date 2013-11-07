@@ -55,8 +55,11 @@ typedef struct {
 	int alarm_id;
 } bt_adapter_timer_t;
 
+#define BT_DISCV_TYPE_LEN 10
+
 bt_adapter_timer_t visible_timer;
 static gboolean is_discovering;
+gchar discovery_role[BT_DISCV_TYPE_LEN];
 static gboolean cancel_by_user;
 static bt_status_t adapter_status = BT_DEACTIVATED;
 static void *adapter_agent = NULL;
@@ -626,6 +629,7 @@ gboolean __bt_enable_timeout_cb(gpointer user_data)
 
 	BT_DBG("");
 
+	BT_DBG("TCT_BT: __bt_enable_timeout_cb");
 	retv_if(_bt_adapter_get_status() == BT_ACTIVATED, FALSE);
 
 	timer_id = 0;
@@ -644,6 +648,8 @@ gboolean __bt_enable_timeout_cb(gpointer user_data)
 
 	_bt_set_disabled(BLUETOOTH_ERROR_TIMEOUT);
 
+	BT_DBG("TCT_BT: Show Noti");
+
 	/* Display notification */
 	notification_status_message_post(BT_STR_NOT_SUPPORT);
 
@@ -659,14 +665,24 @@ int _bt_enable_adapter(void)
 
 	BT_DBG("");
 
+	BT_DBG("TCT_BT: _bt_enable_adapter");
+
 	if (_bt_adapter_get_status() == BT_ACTIVATING) {
 			BT_DBG("Enabling in progress");
+			BT_DBG("TCT_BT: Enabling in progress");
 			return BLUETOOTH_ERROR_IN_PROGRESS;
 	}
 
 	if (_bt_adapter_get_status() == BT_ACTIVATED) {
 			BT_DBG("Already enabled");
+			BT_DBG("TCT_BT: Already enabled");
 			return BLUETOOTH_ERROR_DEVICE_ALREADY_ENABLED;
+	}
+
+	if (_bt_adapter_get_status() == BT_DEACTIVATING) {
+		BT_DBG("Deactivating in progress");
+		BT_DBG("TCT_BT: Deactivating in progress");
+		return BLUETOOTH_ERROR_DEVICE_BUSY;
 	}
 
 	__bt_adapter_set_status(BT_ACTIVATING);
@@ -713,15 +729,24 @@ int _bt_disable_adapter(void)
 	DBusGProxy *proxy;
 
 	BT_DBG("");
+	BT_DBG("TCT_BT: _bt_disable_adapter");
 
 	if (_bt_adapter_get_status() == BT_DEACTIVATING) {
-			BT_DBG("Disabling in progress");
-			return BLUETOOTH_ERROR_IN_PROGRESS;
+		BT_DBG("Disabling in progress");
+		BT_DBG("TCT_BT: Disabling in progress");
+		return BLUETOOTH_ERROR_IN_PROGRESS;
 	}
 
 	if (_bt_adapter_get_status() == BT_DEACTIVATED) {
-			BT_DBG("Already disabled");
-			return BLUETOOTH_ERROR_DEVICE_NOT_ENABLED;
+		BT_DBG("Already disabled");
+		BT_DBG("TCT_BT: Already disabled");
+		return BLUETOOTH_ERROR_DEVICE_NOT_ENABLED;
+	}
+
+	if (_bt_adapter_get_status() == BT_ACTIVATING) {
+		BT_DBG("Activating in progress");
+		BT_DBG("TCT_BT: Activating in progress");
+		return BLUETOOTH_ERROR_DEVICE_BUSY;
 	}
 
 	__bt_adapter_set_status(BT_DEACTIVATING);
@@ -1085,8 +1110,10 @@ int _bt_start_discovery(void)
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
+	g_strlcpy(discovery_role, "LE_BREDR", BT_DISCV_TYPE_LEN);
 	is_discovering = TRUE;
 	cancel_by_user = FALSE;
+	_bt_reset_retry_discovery();
 	/* discovery status will be change in event */
 
 	return BLUETOOTH_ERROR_NONE;
@@ -1100,8 +1127,11 @@ int _bt_start_custom_discovery(bt_discovery_role_type_t role)
 
 	if (_bt_is_discovering() == TRUE) {
 		BT_ERR("BT is already in discovering");
+		BT_DBG("TCT_BT: BT is already in discovering");
 		return BLUETOOTH_ERROR_IN_PROGRESS;
 	}
+
+	BT_DBG("TCT_BT: _bt_start_custom_discovery");
 
 	proxy = _bt_get_adapter_proxy();
 	retv_if(proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
@@ -1119,11 +1149,14 @@ int _bt_start_custom_discovery(bt_discovery_role_type_t role)
 			 G_TYPE_STRING, disc_type,
 			       G_TYPE_INVALID, G_TYPE_INVALID)) {
 		BT_ERR("StartCustomDiscovery failed");
+		BT_DBG("TCT_BT: StartCustomDiscovery failed");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
+	g_strlcpy(discovery_role, disc_type, BT_DISCV_TYPE_LEN);
 	is_discovering = TRUE;
 	cancel_by_user = FALSE;
+	_bt_reset_retry_discovery();
 	/* discovery status will be change in event */
 
 	return BLUETOOTH_ERROR_NONE;
@@ -1135,8 +1168,11 @@ int _bt_cancel_discovery(void)
 
 	if (_bt_is_discovering() == FALSE) {
 		BT_ERR("BT is not in discovering");
+		BT_DBG("TCT_BT: BT is not in discovering");
 		return BLUETOOTH_ERROR_NOT_IN_OPERATION;
 	}
+
+	BT_DBG("TCT_BT: _bt_cancel_discovery");
 
 	proxy = _bt_get_adapter_proxy();
 	retv_if(proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
@@ -1144,6 +1180,7 @@ int _bt_cancel_discovery(void)
 	if (!dbus_g_proxy_call(proxy, "StopDiscovery", NULL,
 			       G_TYPE_INVALID, G_TYPE_INVALID)) {
 		BT_ERR("Discover stop failed");
+		BT_DBG("TCT_BT: Discover stop failed");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
@@ -1156,6 +1193,11 @@ int _bt_cancel_discovery(void)
 gboolean _bt_is_discovering(void)
 {
 	return is_discovering;
+}
+
+gchar *_bt_get_discovery_role(void)
+{
+	return discovery_role;
 }
 
 gboolean _bt_get_discoverying_property(void)
