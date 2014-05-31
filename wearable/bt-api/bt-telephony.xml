@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node>
+  <interface name="org.tizen.csd.Call.Instance">
+    <method name="Answer">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+       <arg type="u" name="callid"/>
+    </method>
+
+    <method name="Release">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+      <arg type="u" name="callid"/>
+    </method>
+
+    <method name="Reject">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+      <arg type="u" name="callid"/>
+    </method>
+
+    <method name="Threeway">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+      <arg type="u" name="value"/>
+    </method>
+
+    <method name="SendDtmf">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+      <arg type="s" name="dtmf"/>
+    </method>
+
+  </interface>
+  </node>

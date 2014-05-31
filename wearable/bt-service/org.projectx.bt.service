@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.projectx.bt
+Exec=/bin/sh -c 'if [ -z `ps ax | grep -v grep | grep bt-service` ] ; then exec /usr/bin/bt-service; fi'

@@ -1,0 +1,11 @@
+prefix=@PREFIX@
+exec_prefix=@EXEC_PREFIX@
+libdir=@LIBDIR@
+includedir=@INCLUDEDIR@
+
+Name: bluetooth-api
+Description: SAMSUNG Linux platform Bluetooth framework API
+Version: @VERSION@
+Requires: dlog dbus-glib-1 vconf
+Libs: -L${libdir} -lbluetooth-api
+Cflags: -I${includedir} -I${includedir}/bt-service

@@ -1,0 +1,1915 @@
+bluetooth-frwk (0.2.53) unstable; urgency=low
+
+  * Tagging and Package upload
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.53
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 11 Jan 2013 10:18:22 +0900
+
+bluetooth-frwk (0.2.52) unstable; urgency=low
+
+  * Tagging and Package upload
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.52
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 08 Jan 2013 13:29:25 +0900
+
+bluetooth-frwk (0.2.51) unstable; urgency=low
+
+  * Tagging and Package upload
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.51
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Wed, 26 Dec 2012 15:49:14 +0530
+
+bluetooth-frwk (0.2.50) unstable; urgency=low
+
+  * Fix the JIRA issue (S1-11315)
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.50
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 26 Dec 2012 08:54:26 +0900
+
+bluetooth-frwk (0.2.49) unstable; urgency=low
+
+  * Fix the PLM issue
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.49
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 20 Dec 2012 15:53:54 +0900
+
+bluetooth-frwk (0.2.48) unstable; urgency=low
+
+  * Fix the PLM issue
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.48
+
+ -- Chethan T N <chethan.tn@samsung.com>  Fri, 14 Dec 2012 19:15:00 +0900
+
+bluetooth-frwk (0.2.47) unstable; urgency=low
+
+  * Re-upload the package
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.47
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 05 Dec 2012 15:06:37 +0900
+
+bluetooth-frwk (0.2.46) unstable; urgency=low
+
+  * Add the timeout error in BT activation
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.46
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 05 Dec 2012 10:19:20 +0900
+
+bluetooth-frwk (0.2.45) unstable; urgency=low
+
+  * Tagging and package upload
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.45
+
+ -- Chethan T N <chethan.tn@samsung.com>  Mon, 03 Dec 2012 20:21:45 +0900
+
+bluetooth-frwk (0.2.44) unstable; urgency=low
+
+  * Fix the but about writing socket data
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.44
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 29 Nov 2012 15:26:27 +0900
+
+bluetooth-frwk (0.2.43) unstable; urgency=low
+
+  * Fix PLM issue P121112-4416
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.43
+
+ -- Divya yadav <divya.yadav@samsung.com>  Wed, 28 Nov 2012 19:24:22 +0530
+
+bluetooth-frwk (0.2.42) unstable; urgency=low
+
+  * Fix PLM issue P121112-4416, change auto pair file path
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.42
+
+ -- Divya yadav <divya.yadav@samsung.com>  Mon, 26 Nov 2012 19:38:43 +0530
+
+bluetooth-frwk (0.2.41) unstable; urgency=low
+
+  * Fix PLM issue P121126-0741
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.41
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 26 Nov 2012 18:09:36 +0900
+
+bluetooth-frwk (0.2.40) unstable; urgency=low
+
+  * Tagging and Upload
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.40
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Thu, 22 Nov 2012 19:26:07 +0530
+
+bluetooth-frwk (0.2.39) unstable; urgency=low
+
+  * Fix the crash in bluetooth_telephony_deinit
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.39
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 22 Nov 2012 14:29:49 +0900
+
+bluetooth-frwk (0.2.38) unstable; urgency=low
+
+  * Fix the problem about RFCOMM / obex server
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.38
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 20 Nov 2012 17:18:52 +0900
+
+bluetooth-frwk (0.2.37) unstable; urgency=low
+
+  * Fix the problem that bt-service was not killed
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.37
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 20 Nov 2012 16:06:26 +0900
+
+bluetooth-frwk (0.2.36) unstable; urgency=low
+
+  * Package upload for PLM Issue P121116-6694 and P121116-6258 fix
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.36
+
+ -- Divya yadav <divya.yadav@samsung.com>  Mon, 19 Nov 2012 17:41:34 +0530
+
+bluetooth-frwk (0.2.35) unstable; urgency=low
+
+  * Enable the BT using script only
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.35
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 19 Nov 2012 15:53:33 +0900
+
+bluetooth-frwk (0.2.34) unstable; urgency=low
+
+  * Fix the bug about BT activation
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.34
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 19 Nov 2012 14:09:02 +0900
+
+bluetooth-frwk (0.2.33) unstable; urgency=low
+
+  * Package upload for PLM Issue P121112-4416 fix
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.33
+
+ -- Divya yadav <divya.yadav@samsung.com>  Thu, 15 Nov 2012 13:37:41 +0530
+
+bluetooth-frwk (0.2.32) unstable; urgency=low
+
+  * Fix the issue that do not receive the event from bt-service
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.32
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 14 Nov 2012 18:02:37 +0900
+
+bluetooth-frwk (0.2.31) unstable; urgency=low
+
+  * Package upload for PLM Issue P121108-4098 fix
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.31
+
+ -- Chethan T N <chethan.tn@samsung.com>  Wed, 14 Nov 2012 15:04:53 +0900
+
+bluetooth-frwk (0.2.30) unstable; urgency=low
+
+  * Upload the package
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.30
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 14 Nov 2012 08:45:06 +0900
+
+bluetooth-frwk (0.2.29) unstable; urgency=low
+
+  * Added support for NREC feature
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.29
+
+ -- Chethan T N <chethan.tn@samsung.com>  Thu, 08 Nov 2012 17:05:38 +0900
+
+bluetooth-frwk (0.2.28) unstable; urgency=low
+
+  * Add g_type_init in bluetooth_telephony_init API
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.28
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 07 Nov 2012 19:10:54 +0900
+
+bluetooth-frwk (0.2.27) unstable; urgency=low
+
+  * Add g_type_init in bluetooth_telephony_init API
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.27
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 07 Nov 2012 15:10:43 +0900
+
+bluetooth-frwk (0.2.26) unstable; urgency=low
+
+  * Update version number
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.26
+
+ -- Jaekyun Lee <jkyun.lee@samsung.com>  Tue, 06 Nov 2012 16:20:45 +0900
+
+bluetooth-frwk (0.2.25) unstable; urgency=low
+
+  * Support contacts-service2
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.25
+
+ -- Jaekyun Lee <jkyun.lee@samsung.com>  Tue, 06 Nov 2012 12:54:51 +0900
+
+bluetooth-frwk (0.2.24) unstable; urgency=low
+
+  * Merged BT agent to BT service
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.24
+
+ -- Divya yadav <divya.yadav@samsung.com>  Sat, 03 Nov 2012 10:39:22 +0530
+
+bluetooth-frwk (0.2.23) unstable; urgency=low
+
+  * Merged BT agent to BT service
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.23
+
+ -- Jaganath K <jaganath.k@samsung.com>  Fri, 02 Nov 2012 16:40:09 +0530
+
+bluetooth-frwk (0.2.22) unstable; urgency=low
+
+  * Remove bt-agent process
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.22
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 31 Oct 2012 13:41:05 +0900
+
+bluetooth-frwk (0.2.21) unstable; urgency=low
+
+  * Handle abnormal terminations of the servers
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.21
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 24 Oct 2012 13:22:55 +0900
+
+bluetooth-frwk (0.2.20) unstable; urgency=low
+
+  * Implement bluetooth_is_device_connected API
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.20
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 18 Oct 2012 11:52:05 +0900
+
+bluetooth-frwk (0.2.19) unstable; urgency=low
+
+  * Add device events
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.19
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 16 Oct 2012 11:13:15 +0900
+
+bluetooth-frwk (0.2.18) unstable; urgency=low
+
+  * Assign the transfer ID
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.18
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 12 Oct 2012 15:38:00 +0900
+
+bluetooth-frwk (0.2.17) unstable; urgency=low
+
+  * Copy the license file in target
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.17
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 11 Oct 2012 14:04:53 +0900
+
+bluetooth-frwk (0.2.16) unstable; urgency=low
+
+  * Implement MDM phase II
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.16
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 10 Oct 2012 13:45:06 +0900
+
+bluetooth-frwk (0.2.15) stable; urgency=low
+
+  * Fix the crash in remove socket
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.15
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 09 Oct 2012 13:51:26 +0900
+
+bluetooth-frwk (0.2.14) unstable; urgency=low
+
+  * Fix the crash in OPP sending
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.14
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 05 Oct 2012 16:01:00 +0900
+
+bluetooth-frwk (0.2.13) unstable; urgency=low
+
+  * Fix the crash in OPP sending
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.13
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 28 Sep 2012 12:34:28 +0900
+
+bluetooth-frwk (0.2.12) unstable; urgency=low
+
+  * Fix the bug about RFCOMM
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.12
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 25 Sep 2012 16:39:29 +0900
+
+bluetooth-frwk (0.2.11) unstable; urgency=low
+
+  * Package upload for PLM Issue P120919-5037 Fix
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.11
+
+ -- Chethan T N <chethan.tn@samsung.com>  Fri, 21 Sep 2012 18:59:23 +0530
+
+bluetooth-frwk (0.2.10) unstable; urgency=low
+
+  * Modify the code about passkey show
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.10
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 21 Sep 2012 20:25:23 +0900
+
+bluetooth-frwk (0.2.9) unstable; urgency=low
+
+  * Implement the  FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.9
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 21 Sep 2012 12:44:20 +0900
+
+bluetooth-frwk (0.2.8) unstable; urgency=low
+
+  * Apply smack manifest file
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.8
+
+ -- Sangki Park <sangki79.park@samsung.com>  Fri, 21 Sep 2012 10:14:48 +0900
+
+bluetooth-frwk (0.2.7) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.7
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 20 Sep 2012 11:31:15 +0900
+
+bluetooth-frwk (0.2.6) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.6
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 19 Sep 2012 14:54:42 +0900
+
+bluetooth-frwk (0.2.5) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.5
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 18 Sep 2012 17:52:04 +0900
+
+bluetooth-frwk (0.2.4) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.4
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 18 Sep 2012 13:42:30 +0900
+
+bluetooth-frwk (0.2.3) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.3
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 17 Sep 2012 20:05:08 +0900
+
+bluetooth-frwk (0.2.1) unstable; urgency=low
+
+  * Implement new FRWK
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.2.1
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 17 Sep 2012 13:37:01 +0900
+
+bluetooth-frwk (0.1.93) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: magnolia/framework/connectivity/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.93
+
+ -- Sangki Park <sangki79.park@samsung.com>  Thu, 13 Sep 2012 10:51:48 +0900
+
+bluetooth-frwk (0.1.92) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.92
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 11 Sep 2012 16:31:23 +0900
+
+bluetooth-frwk (0.1.91) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.91
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 11 Sep 2012 10:04:32 +0900
+
+bluetooth-frwk (0.1.90) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.90
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 10 Sep 2012 15:43:33 +0900
+
+bluetooth-frwk (0.1.89) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.89
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 10 Sep 2012 11:00:03 +0900
+
+bluetooth-frwk (0.1.88) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.88
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 07 Sep 2012 15:23:55 +0900
+
+bluetooth-frwk (0.1.87) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.87
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 04 Sep 2012 09:47:19 +0900
+
+bluetooth-frwk (0.1.86) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.86
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Sat, 01 Sep 2012 13:32:17 +0900
+
+bluetooth-frwk (0.1.85) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.85
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Sat, 01 Sep 2012 09:06:39 +0900
+
+bluetooth-frwk (0.1.84) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.84
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 31 Aug 2012 09:39:10 +0900
+
+bluetooth-frwk (0.1.83) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.83
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com> Tue, 28 Aug 2012 14:19:47 +0900
+
+bluetooth-frwk (0.1.82) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.82
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com> Tue, 28 Aug 2012 14:19:02 +0900
+
+
+bluetooth-frwk (0.1.81) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.81
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 23 Aug 2012 12:54:50 +0900
+
+bluetooth-frwk (0.1.80) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.80
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com> Fri, 17 Aug 2012 13:02:55 +0900
+
+bluetooth-frwk (0.1.79) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.79
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 16 Aug 2012 17:11:17 +0900
+
+bluetooth-frwk (0.1.78) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.78
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 08 Aug 2012 17:01:37 +0900
+
+bluetooth-frwk (0.1.77) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.77
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 08 Aug 2012 12:16:50 +0900
+
+bluetooth-frwk (0.1.76) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.76
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Tue, 07 Aug 2012 15:58:21 +0530
+
+bluetooth-frwk (0.1.75) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.75
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Tue, 07 Aug 2012 09:29:55 +0530
+
+bluetooth-frwk (0.1.74) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.74
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 06 Aug 2012 18:01:12 +0900
+
+bluetooth-frwk (0.1.73) unstable; urgency=low
+
+  * Replace deprecated APIs about glib-2.3.0
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.73
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 01 Aug 2012 13:50:43 +0900
+
+bluetooth-frwk (0.1.72) unstable; urgency=low
+
+  * Taging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.72
+
+ -- Chethan T N <chethan.tn@samsung.com>  Tue, 31 Jul 2012 18:09:09 +0530
+
+bluetooth-frwk (0.1.71) unstable; urgency=low
+
+  * Re-upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.71
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 26 Jul 2012 08:34:33 +0900
+
+bluetooth-frwk (0.1.70) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.70
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 25 Jul 2012 10:56:30 +0900
+
+bluetooth-frwk (0.1.69) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.69
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 20 Jul 2012 14:07:19 +0900
+
+bluetooth-frwk (0.1.68) unstable; urgency=low
+
+  * Tagging and upload the package
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.68
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 19 Jul 2012 16:59:27 +0900
+
+bluetooth-frwk (0.1.67) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.67
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 18 Jul 2012 12:44:25 +0900
+
+bluetooth-frwk (0.1.66) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.66
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 10 Jul 2012 17:56:58 +0900
+
+bluetooth-frwk (0.1.65) unstable; urgency=low
+
+  * Upload package for changes.
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.65
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Wed, 20 Jun 2012 13:02:11 +0530
+
+bluetooth-frwk (0.1.64) unstable; urgency=low
+
+  * Implement the requirements from OSP
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.64
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 13 Jun 2012 09:12:44 +0900
+
+bluetooth-frwk (0.1.63) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.63
+
+ -- Chethan T N <chethan.tn@samsung.com>  Tue, 22 May 2012 11:26:43 +0530
+
+bluetooth-frwk (0.1.62) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.62
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 21 May 2012 11:05:02 +0900
+
+bluetooth-frwk (0.1.61) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.61
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 18 May 2012 17:44:58 +0900
+
+bluetooth-frwk (0.1.60) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.60
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 14 May 2012 08:59:54 +0900
+
+bluetooth-frwk (0.1.59) unstable; urgency=low
+
+  * Use the MDM system popup
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.59
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 08 May 2012 08:58:56 +0900
+
+bluetooth-frwk (0.1.58) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.58
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Thu, 26 Apr 2012 12:03:49 +0530
+
+bluetooth-frwk (0.1.57) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.57
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 24 Apr 2012 11:43:25 +0900
+
+bluetooth-frwk (0.1.56) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.56
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 19 Apr 2012 08:57:02 +0900
+
+bluetooth-frwk (0.1.55) unstable; urgency=low
+
+  * Implement the MDM handsfree mode
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.55
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 10 Apr 2012 08:36:02 +0900
+
+bluetooth-frwk (0.1.54) unstable; urgency=low
+
+  * Add the authorize API to support BADA
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.54
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 30 Mar 2012 16:43:59 +0900
+
+bluetooth-frwk (0.1.53) unstable; urgency=low
+
+  * Revert session bus (agent) to system bus
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.53
+
+ -- Chanyeol Park <chanyeol.park@samsung.com>  Sun, 25 Mar 2012 16:51:41 +0900
+
+bluetooth-frwk (0.1.52) unstable; urgency=low
+
+  * fixed dbus bus type to session bus
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.52
+
+ -- Jaekyun Lee <jkyun.lee@samsung.com>  Sat, 24 Mar 2012 16:35:23 +0900
+
+bluetooth-frwk (0.1.51) unstable; urgency=low
+
+  * Set the agent timer
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.51
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 20 Mar 2012 14:53:10 +0900
+
+bluetooth-frwk (0.1.50) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.50
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 24 Feb 2012 09:50:40 +0900
+
+bluetooth-frwk (0.1.49) unstable; urgency=low
+
+  * Upload the changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.49
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 14 Feb 2012 13:23:45 +0900
+
+bluetooth-frwk (0.1.48) unstable; urgency=low
+
+  * Fix the cancel discovery issue
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.48
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 01 Feb 2012 15:22:45 +0900
+
+bluetooth-frwk (0.1.47) unstable; urgency=low
+
+  * Add the code to get MDM service / release MDM service
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.47
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 31 Jan 2012 17:01:18 +0900
+
+bluetooth-frwk (0.1.46) unstable; urgency=low
+
+  * Remove bluetooth-frwk-test dpkg
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.46
+
+ -- Chanyeol Park <chanyeol.park@samsung.com>  Thu, 26 Jan 2012 16:39:08 +0900
+
+bluetooth-frwk (0.1.45) unstable; urgency=low
+
+  * Restrict BT enable, if mdm_get_allow_bluetooth_mode is MDM_BT_RESTRICTED
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.45
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 16 Jan 2012 15:36:42 +0900
+
+bluetooth-frwk (0.1.44) unstable; urgency=low
+
+  * Fix the spelling of API name (sessioin -> session)
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.44
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 05 Jan 2012 17:53:01 +0900
+
+bluetooth-frwk (0.1.43) unstable; urgency=low
+
+  * Increase the version number to upload
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.43
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 02 Jan 2012 10:32:04 +0900
+
+bluetooth-frwk (0.1.42) unstable; urgency=low
+
+  * Upload the package to changes
+  * Git: slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.42
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 30 Dec 2011 07:59:59 +0900
+
+bluetooth-frwk (0.1.41) unstable; urgency=low
+
+  * Remove the input parameter of get_transfers dbus method for obexd
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.41
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 21 Nov 2011 18:07:12 +0900
+
+bluetooth-frwk (0.1.40) unstable; urgency=low
+
+  * Modify the bluetooth_is_supported API
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.40
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 14 Nov 2011 17:16:28 +0900
+
+bluetooth-frwk (0.1.39) unstable; urgency=low
+
+  * Add the 2 APIs for the MDM service
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.39
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 11 Nov 2011 08:35:55 +0900
+
+bluetooth-frwk (0.1.38) unstable; urgency=low
+
+  * Add the full values of the uuid in service list information (Support the CAPI)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.38
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 08 Nov 2011 15:08:35 +0900
+
+bluetooth-frwk (0.1.37) unstable; urgency=low
+
+  * Fix the prevent defect (CID: 57479)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.37
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 28 Oct 2011 14:50:31 +0900
+
+bluetooth-frwk (0.1.36) unstable; urgency=low
+
+  * Change bluetooth_set_discoverable_mode API to sync call (Support the CAPI)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.36
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 26 Oct 2011 17:21:32 +0900
+
+bluetooth-frwk (0.1.35) unstable; urgency=low
+
+  * Modify the error types
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.35
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 25 Oct 2011 10:18:24 +0900
+
+bluetooth-frwk (0.1.34) unstable; urgency=low
+
+  * Modify bluetooth_set_local_name / bluetooth_get_local_name API
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.34
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 19 Oct 2011 12:57:12 +0900
+
+bluetooth-frwk (0.1.33) unstable; urgency=low
+
+  * Change the bluetooth_set_local_name to synchronous call (Support BADA / CAPI)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.33
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 12 Oct 2011 14:47:55 +0900
+
+bluetooth-frwk (0.1.32) unstable; urgency=low
+
+  * Arrange the error type (Support the CAPI)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.32
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 12 Oct 2011 13:48:15 +0900
+
+bluetooth-frwk (0.1.31) unstable; urgency=low
+
+  * Fix the bug about device name (CQ H0100134651)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.31
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 06 Oct 2011 19:32:56 +0900
+
+bluetooth-frwk (0.1.30) unstable; urgency=low
+
+  * Don't call the AUL, if the beat-bluetooth process is not running
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.30
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 06 Oct 2011 18:56:01 +0900
+
+bluetooth-frwk (0.1.29) unstable; urgency=low
+
+  * Return the paired device only in bluetooth_get_bonded_device_list
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.29
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 04 Oct 2011 08:38:03 +0900
+
+bluetooth-frwk (0.1.28) unstable; urgency=low
+
+  * Modify the contact-service API
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.28
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 26 Sep 2011 17:21:23 +0900
+
+bluetooth-frwk (0.1.27) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.27
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 07 Sep 2011 16:34:10 +0900
+
+bluetooth-frwk (0.1.26) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.26
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 07 Sep 2011 08:54:01 +0900
+
+bluetooth-frwk (0.1.25) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.25
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 06 Sep 2011 08:30:18 +0900
+
+bluetooth-frwk (0.1.24) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.24
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 02 Sep 2011 08:37:37 +0900
+
+bluetooth-frwk (0.1.23) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.23
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 29 Aug 2011 19:17:05 +0900
+
+bluetooth-frwk (0.1.22) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.22
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 12 Aug 2011 15:57:26 +0900
+
+bluetooth-frwk (0.1.21) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.21
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 09 Aug 2011 08:33:57 +0900
+
+bluetooth-frwk (0.1.20) unstable; urgency=low
+
+  * Remove the system popup when the remote device cancel the event (H0100131180)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.20
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 01 Aug 2011 08:27:40 +0900
+
+bluetooth-frwk (0.1.19) unstable; urgency=low
+
+  * Upload package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.19
+
+ -- Jaganath K <jaganath.k@samsung.com>  Thu, 07 Jul 2011 13:16:30 +0530
+
+bluetooth-frwk (0.1.18) unstable; urgency=low
+
+  * Fix the bus in stop discoverying
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.18
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 07 Jul 2011 15:29:07 +0900
+
+bluetooth-frwk (0.1.17) unstable; urgency=low
+
+  * Add the bluetooth_get_bonded_device API
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.17 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 28 Jun 2011 15:44:17 +0900
+
+bluetooth-frwk (0.1.16) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.16
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Fri, 24 Jun 2011 17:40:21 +0530
+
+bluetooth-frwk (0.1.15) unstable; urgency=low
+
+  * Fix dbus system bus double unref problem
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.15
+
+ -- Chanyeol Park <chanyeol.park@samsung.com>  Wed, 22 Jun 2011 21:56:17 +0900
+
+bluetooth-frwk (0.1.14) unstable; urgency=low
+
+  * Add the network API for BT tethering
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.14
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 17 Jun 2011 13:26:44 +0900
+
+bluetooth-frwk (0.1.13) unstable; urgency=low
+
+  * Add the NULL check routine
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.13
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 10 Jun 2011 11:16:56 +0900
+
+bluetooth-frwk (0.1.12) unstable; urgency=low
+
+  * Fix de-init session bug
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.12
+
+ -- Chanyeol Park <chanyeol.park@samsung.com>  Thu, 09 Jun 2011 21:57:11 +0900
+
+bluetooth-frwk (0.1.11) unstable; urgency=low
+
+  * Upload package for changes
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.11
+
+ -- Sunil Kumar Behera <sunil.behera@samsung.com>  Tue, 07 Jun 2011 19:19:13 +0530
+
+bluetooth-frwk (0.1.10) stable; urgency=low
+
+  * Modify the 'BT enable' check routine
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.10
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 30 May 2011 16:36:11 +0900
+
+bluetooth-frwk (0.1.9) unstable; urgency=low
+
+  * Fix the BS when the process is terminated without deleting the g_timer. (Defect H0100127300)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.9
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 27 May 2011 13:58:01 +0900
+
+bluetooth-frwk (0.1.8) unstable; urgency=low
+
+  * Add the uuid values for developers
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.8
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 25 May 2011 11:07:33 +0900
+
+bluetooth-frwk (0.1.7) unstable; urgency=low
+
+  * Add the 'user_data' parameter in bluetooth_register_callback
+  * Modify the DTS makefile to sbs
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.7 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 20 May 2011 09:01:34 +0900
+
+bluetooth-frwk (0.1.6) unstable; urgency=low
+
+  * Fix Crash while receive image
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.6
+
+ -- Chanyeol Park <chanyeol.park@samsung.com>  Thu, 19 May 2011 20:19:04 +0900
+
+bluetooth-frwk (0.1.5) unstable; urgency=low
+
+  * Show the ticker noti when the file recieved (Defect H0100126544)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.5
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 13 May 2011 17:35:58 +0900
+
+bluetooth-frwk (0.1.4) unstable; urgency=low
+
+  * Correct the code about variable memory.
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.4
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 04 May 2011 11:00:59 +0900
+
+bluetooth-frwk (0.1.3) unstable; urgency=low
+
+  * Add the event signal of the authorized (Requested by CAPI part)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.3
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 02 May 2011 18:11:50 +0900
+
+bluetooth-frwk (0.1.2) unstable; urgency=low
+
+  * Remove the obex-agent.h file in install
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.2 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 28 Apr 2011 11:39:33 +0900
+
+bluetooth-frwk (0.1.1) unstable; urgency=low
+
+  * Increase the version
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.1 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 28 Apr 2011 11:23:53 +0900
+
+bluetooth-frwk (0.1.0) unstable; urgency=low
+
+  * Release ug-obexd init dpkg 
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.1.0
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 26 Apr 2011 11:24:07 +0900
+
+bluetooth-frwk (0.0.94) unstable; urgency=low
+
+  * Add the package dependency of the dbus-glib-1
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.94 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 06 Apr 2011 13:16:52 +0900
+
+bluetooth-frwk (0.0.93) unstable; urgency=low
+
+  * Fix the build break
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.93 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 06 Apr 2011 13:01:04 +0900
+
+bluetooth-frwk (0.0.92) unstable; urgency=low
+
+  * Re-upload package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.92
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 07 Mar 2011 15:33:50 +0900
+
+bluetooth-frwk (0.0.91) unstable; urgency=low
+
+  * Upload package
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.91 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 07 Mar 2011 10:07:43 +0900
+
+bluetooth-frwk (0.0.90) unstable; urgency=low
+
+  * Modify the API and test case
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.90
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 04 Mar 2011 17:22:45 +0900
+
+bluetooth-frwk (0.0.89) unstable; urgency=low
+
+  * Modify the headset check-routin in auto-pairing
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.89
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 03 Mar 2011 11:16:27 +0900
+
+bluetooth-frwk (0.0.88) unstable; urgency=low
+
+  * Uploading Package 
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.88 
+
+ -- Jaganath <jaganath.k@samsung.com>  Tue, 22 Feb 2011 13:05:13 +0530
+
+bluetooth-frwk (0.0.87) unstable; urgency=low
+
+  * Remove the authorizing popup in enable / diable adapter
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.87 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 11 Feb 2011 10:54:00 +0900
+
+bluetooth-frwk (0.0.86) unstable; urgency=low
+
+  * Fix the prevent defect (FOWARD NULL / BUFFER OVERFLOW)
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.86
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 10 Feb 2011 09:33:29 +0900
+
+bluetooth-frwk (0.0.85) unstable; urgency=low
+
+  * Implement bt_get_bonded_device_list API
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.85 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 20 Jan 2011 19:10:41 +0900
+
+bluetooth-frwk (0.0.84) unstable; urgency=low
+
+  * Move the popup UI to bt-syspopup
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.84 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 06 Jan 2011 14:38:09 +0900
+
+bluetooth-frwk (0.0.83) unstable; urgency=low
+
+  * BT name request fucntion returns error, when BT is not activated
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.83
+
+ -- ChanYeol Park <chanyeol.park@samsung.com>  Tue, 04 Jan 2011 14:03:28 +0900
+
+bluetooth-frwk (0.0.82) unstable; urgency=low
+
+  * Made the Adapter.GetProperties Sync during device enable
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.82
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Fri, 24 Dec 2010 15:36:19 +0530
+
+bluetooth-frwk (0.0.81) unstable; urgency=low
+
+  * Block the elm_exit when END key press
+  * Git: 165.213.180.234:slp/pkgs/b/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.81 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 09 Dec 2010 16:24:25 +0900
+
+bluetooth-frwk (0.0.80) unstable; urgency=low
+
+  * Enable the auto-pairing in headset case
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.80 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 26 Nov 2010 13:59:34 +0900
+
+bluetooth-frwk (0.0.79) unstable; urgency=low
+
+  * Add auto-pairing code in headset case
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.79
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 24 Nov 2010 19:02:16 +0900
+
+bluetooth-frwk (0.0.78) unstable; urgency=low
+
+  * Change the AUL name
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.78 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 24 Nov 2010 13:18:10 +0900
+
+bluetooth-frwk (0.0.77) unstable; urgency=low
+
+  * Pop the navigation bar when the passkey view destroy
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.77
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 22 Nov 2010 19:59:09 +0900
+
+bluetooth-frwk (0.0.76) unstable; urgency=low
+
+  * Focus in the entry view
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.76
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 17 Nov 2010 20:37:56 +0900
+
+bluetooth-frwk (0.0.75) unstable; urgency=low
+
+  * Fixed Get Bonded device list end of indication, updated the doxygen PG
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.75
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Wed, 17 Nov 2010 15:54:34 +0530
+
+bluetooth-frwk (0.0.74) unstable; urgency=low
+
+  * Modify the condition value about flight mode
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.74 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 10 Nov 2010 09:49:55 +0900
+
+bluetooth-frwk (0.0.73) unstable; urgency=low
+
+  * Upload package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.73 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 09 Nov 2010 17:29:38 +0900
+
+bluetooth-frwk (0.0.72) unstable; urgency=low
+
+  * Rollback codes
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.72
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 09 Nov 2010 16:36:52 +0900
+
+bluetooth-frwk (0.0.71) unstable; urgency=low
+
+  * Remove evas_object_del after elm_navigationbar_pop
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.71 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 09 Nov 2010 15:19:12 +0900
+
+bluetooth-frwk (0.0.70) unstable; urgency=low
+
+  * Set the intial timeout value to zero
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.70 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 08 Nov 2010 13:44:37 +0900
+
+bluetooth-frwk (0.0.69) unstable; urgency=low
+
+  * Display the indicator
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.69
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 05 Nov 2010 14:12:31 +0900
+
+bluetooth-frwk (0.0.68) unstable; urgency=low
+
+  * Implemented the get bonded device list through DBUS
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.68
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Thu, 04 Nov 2010 12:50:06 +0530
+
+bluetooth-frwk (0.0.67) unstable; urgency=low
+
+  * Move the popup over lock screen
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.67 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 03 Nov 2010 20:54:43 +0900
+
+bluetooth-frwk (0.0.66) unstable; urgency=low
+
+  * Add the homepage in control file
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.66 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 29 Oct 2010 17:13:06 +0900
+
+bluetooth-frwk (0.0.65) unstable; urgency=low
+
+  * Moved the sc_core_agent from btstack
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.65 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 29 Oct 2010 11:00:30 +0900
+
+bluetooth-frwk (0.0.64) unstable; urgency=low
+
+  * Modify / Add files about LiMo Contribution
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.64 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 25 Oct 2010 21:35:37 +0900
+
+bluetooth-frwk (0.0.63) unstable; urgency=low
+
+  * Show the IME when the passkey input
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.63 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 21 Oct 2010 17:48:55 +0900
+
+bluetooth-frwk (0.0.62) unstable; urgency=low
+
+  * Fix Device Property Changed UUIDs signal call back bug
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.62
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 21 Oct 2010 11:25:34 +0900
+
+bluetooth-frwk (0.0.61) unstable; urgency=low
+
+  * Upload package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.61
+
+ -- Hye-Jin Kim <hyejin0906.kim@samsung.com>  Wed, 20 Oct 2010 16:48:47 +0900
+
+bluetooth-frwk (0.0.60) unstable; urgency=low
+
+  * Modified the rfcomm connect API
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.60
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Tue, 19 Oct 2010 11:13:38 +0530
+
+bluetooth-frwk (0.0.59) unstable; urgency=low
+
+  * Reupload the package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.59
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 13 Oct 2010 20:25:41 +0900
+
+bluetooth-frwk (0.0.58) unstable; urgency=low
+
+  * Move the bt-agent script to rc.5
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.58 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 13 Oct 2010 18:11:18 +0900
+
+bluetooth-frwk (0.0.57) unstable; urgency=low
+
+  * Implemented bluetooth_get_bonded_device_list API
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.57
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Fri, 08 Oct 2010 18:32:51 +0530
+
+bluetooth-frwk (0.0.56) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.56
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 06 Oct 2010 16:41:39 +0900
+
+bluetooth-frwk (0.0.55) unstable; urgency=low
+
+  * Modify the TETware code
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.55
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Wed, 06 Oct 2010 16:08:56 +0900
+
+bluetooth-frwk (0.0.54) unstable; urgency=low
+
+  * Update the Programming Guide
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.54 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 01 Oct 2010 15:22:54 +0900
+
+bluetooth-frwk (0.0.53) unstable; urgency=low
+
+  * Modify the visibility
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.53
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 01 Oct 2010 13:42:02 +0900
+
+bluetooth-frwk (0.0.52) unstable; urgency=low
+
+  * Modify the BT aul to the backgroud mode
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.52 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 01 Oct 2010 09:00:45 +0900
+
+bluetooth-frwk (0.0.51) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.51
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Thu, 30 Sep 2010 18:20:43 +0530
+
+bluetooth-frwk (0.0.50) unstable; urgency=low
+
+  * Upload the package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.50
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 17 Sep 2010 19:39:58 +0900
+
+bluetooth-frwk (0.0.49) unstable; urgency=low
+
+  * Fix the TETware code
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.49 
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 17 Sep 2010 19:02:30 +0900
+
+bluetooth-frwk (0.0.48) unstable; urgency=low
+
+  * Add the TETware code
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.48
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 17 Sep 2010 10:47:01 +0900
+
+bluetooth-frwk (0.0.47) unstable; urgency=low
+
+  * Upload package
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.47
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 16 Sep 2010 09:35:21 +0900
+
+bluetooth-frwk (0.0.46) unstable; urgency=low
+
+  * Added the Connected event and made connect Async
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.46
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Tue, 14 Sep 2010 12:48:33 +0530
+
+bluetooth-frwk (0.0.45) unstable; urgency=low
+
+  * Modify the GAP API
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.45
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 14 Sep 2010 16:02:42 +0900
+
+bluetooth-frwk (0.0.44) unstable; urgency=low
+
+  * Apply new font guide
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.44
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Sat, 11 Sep 2010 10:16:37 +0900
+
+bluetooth-frwk (0.0.43) unstable; urgency=low
+
+  * Repacke for EFL upgrade
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.43
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 10 Sep 2010 19:09:14 +0900
+
+bluetooth-frwk (0.0.42) unstable; urgency=low
+
+  * Added the support for Rfcomm api's multiple server and client with in
+    single process 
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.42
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Mon, 06 Sep 2010 18:50:55 +0530
+
+bluetooth-frwk (0.0.41) unstable; urgency=low
+
+  * Fixed the socket fd leak during the ACL link break when the client is connected 
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.41
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Tue, 31 Aug 2010 21:36:19 +0530
+
+bluetooth-frwk (0.0.40) unstable; urgency=low
+
+  * Added device address to the connection status structure
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.40
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Tue, 31 Aug 2010 14:30:32 +0530
+
+bluetooth-frwk (0.0.39) unstable; urgency=low
+
+  * Added rfcomm API's
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.39
+
+ -- Syam Sidhardhan <s.syam@samsung.com>  Mon, 30 Aug 2010 21:37:52 +0530
+
+bluetooth-frwk (0.0.38) unstable; urgency=low
+
+  * Code cleanup
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.38
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Mon, 30 Aug 2010 14:23:28 +0900
+
+bluetooth-frwk (0.0.37) unstable; urgency=low
+
+  * Add the SLP-DevGuide files
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.37
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 26 Aug 2010 08:25:20 +0900
+
+bluetooth-frwk (0.0.36) unstable; urgency=low
+
+  * Fix the prevent defect
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.36
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 24 Aug 2010 21:04:28 +0900
+
+bluetooth-frwk (0.0.35) unstable; urgency=low
+
+  * Modify the doxygen comments
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.35
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 20 Aug 2010 18:15:04 +0900
+
+bluetooth-frwk (0.0.34) unstable; urgency=low
+
+  * Apply the beat winset
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.34
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 20 Aug 2010 09:53:49 +0900
+
+bluetooth-frwk (0.0.33) unstable; urgency=low
+
+  * Apply the beat winset
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.33
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Tue, 17 Aug 2010 16:38:31 +0900
+
+bluetooth-frwk (0.0.32) unstable; urgency=low
+
+  * Chane elm_notify APIs to elm_popup APIs
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.32
+
+ -- Hye-Jin Kim <hyejin0906.kim@samsung.com>  Tue, 10 Aug 2010 10:04:18 +0900
+
+bluetooth-frwk (0.0.31) unstable; urgency=low
+
+  * Call the AUL message when agent start
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.31
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 06 Aug 2010 18:16:42 +0900
+
+bluetooth-frwk (0.0.30) unstable; urgency=low
+
+  * Apply new appcore
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.30
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 05 Aug 2010 22:05:49 +0900
+
+bluetooth-frwk (0.0.29) unstable; urgency=low
+
+  * Fix disabled event code
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.29
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Tue, 03 Aug 2010 16:35:28 +0900
+
+bluetooth-frwk (0.0.28) unstable; urgency=low
+
+  * Fix the bug about discovering (Adjust the range of unsigned int)
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.28
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Fri, 30 Jul 2010 15:30:25 +0900
+
+bluetooth-frwk (0.0.27) unstable; urgency=low
+
+  * Fix print log format
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.27
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Fri, 30 Jul 2010 09:41:25 +0900
+
+bluetooth-frwk (0.0.25) unstable; urgency=low
+
+  * Fix password entry in input view to show the last inputed value
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.25
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Fri, 23 Jul 2010 19:50:35 +0900
+
+bluetooth-frwk (0.0.24) unstable; urgency=low
+
+  * Add missing major class enum and fix wrong discoverable mode value in
+    visibility changed event
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.24
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Thu, 22 Jul 2010 22:23:04 +0900
+
+bluetooth-frwk (0.0.23) unstable; urgency=low
+
+  * Fix theme setting envrionment string
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.23
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Thu, 22 Jul 2010 19:58:50 +0900
+
+bluetooth-frwk (0.0.22) unstable; urgency=low
+
+  * Fix to send proper device information after pairing
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.22
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Tue, 20 Jul 2010 20:44:54 +0900
+
+bluetooth-frwk (0.0.21) unstable; urgency=low
+
+  * Fix doxygen group for SDK document
+  * Git: 165.213.180.234:/git/slp/pkgs/bluetooth-frwk
+  * Tag: bluetooth-frwk_0.0.21
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Thu, 15 Jul 2010 14:10:23 +0900
+
+bluetooth-frwk (0.0.20) unstable; urgency=low
+
+  * Fix to show IME on paring by adding focusing option
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.20
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Tue, 13 Jul 2010 11:39:37 +0900
+
+bluetooth-frwk (0.0.19) unstable; urgency=low
+
+  * Add window layer lower API to hide function
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.19
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Mon, 12 Jul 2010 19:25:21 +0900
+
+bluetooth-frwk (0.0.18) unstable; urgency=low
+
+  * Fix PIN code length display in agent as scalable UI
+  * Fix input method framework API to new version
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.18
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Mon, 12 Jul 2010 14:58:55 +0900
+
+bluetooth-frwk (0.0.17) unstable; urgency=low
+
+  * Fix set local name after enabling
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.17
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Thu, 08 Jul 2010 19:45:40 +0900
+
+bluetooth-frwk (0.0.16) unstable; urgency=low
+
+  * Fix set discoverable mode with no timeout
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.16
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Thu, 08 Jul 2010 19:18:47 +0900
+
+bluetooth-frwk (0.0.15) unstable; urgency=low
+
+  * Modify the maintainer list
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.15
+
+ -- DoHyun Pyun <dh79.pyun@samsung.com>  Thu, 08 Jul 2010 10:52:24 +0900
+
+bluetooth-frwk (0.0.14) unstable; urgency=low
+
+  * Fix struct for doc
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.14
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Mon, 05 Jul 2010 19:06:41 +0900
+
+bluetooth-frwk (0.0.13) unstable; urgency=low
+
+  * Enable SDP API, Add GAP API implementation
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.13
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Thu, 24 Jun 2010 13:57:12 +0900
+
+bluetooth-frwk (0.0.12) unstable; urgency=low
+
+  * Add func,line info in dlog 
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.12
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Wed, 16 Jun 2010 20:59:12 +0900
+
+bluetooth-frwk (0.0.11) unstable; urgency=low
+
+  * Dlog api changes applied
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.11
+
+ -- Shriram Joshi <shriram.j@samsung.com>  Tue, 15 Jun 2010 19:44:16 +0530
+
+bluetooth-frwk (0.0.10) unstable; urgency=low
+
+  * Add show/hide win_main evas object 
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.10
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Tue, 15 Jun 2010 17:34:49 +0900
+
+bluetooth-frwk (0.0.9) unstable; urgency=low
+
+  * Fix Window Show/Hide operation
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.9
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Tue, 15 Jun 2010 15:15:24 +0900
+
+bluetooth-frwk (0.0.8) unstable; urgency=low
+
+  * Hide Agent during booting time with BT activation state
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.8
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Tue, 15 Jun 2010 12:15:52 +0900
+
+bluetooth-frwk (0.0.7) unstable; urgency=low
+
+  * Modify bool as gboolean
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.7
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Mon, 14 Jun 2010 18:34:36 +0900
+
+bluetooth-frwk (0.0.6) unstable; urgency=low
+
+  * Fix debug dpkg option
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.6
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Sat, 12 Jun 2010 15:20:57 +0900
+
+bluetooth-frwk (0.0.5) unstable; urgency=low
+
+  * Add agent activation/deactivation mechanism
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.5
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Thu, 10 Jun 2010 21:49:46 +0900
+
+bluetooth-frwk (0.0.4) unstable; urgency=low
+
+  * Temporarily Remove Adapter Signal Handle
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.4
+
+ -- chanyeol.park <chanyeol.park@samsung.com>  Wed, 09 Jun 2010 13:55:31 +0900
+
+bluetooth-frwk (0.0.3) unstable; urgency=low
+
+  * Add more APIs for GAP
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.3
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Mon, 31 May 2010 22:56:59 +0900
+
+bluetooth-frwk (0.0.2) unstable; urgency=low
+
+  * Add Doxygen generate flag in control
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.2
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Mon, 31 May 2010 11:21:26 +0900
+
+bluetooth-frwk (0.0.1) unstable; urgency=low
+
+  * Initial Release.
+  * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/bluetooth-frwk-0
+  * Tag: bluetooth-frwk_0.0.1
+
+ -- Seung-Woo Kim <sw0312.kim@samsung.com>  Sat, 29 May 2010 18:44:49 +0900

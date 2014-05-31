@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.projectx.bt
+Exec=/bin/sh -c 'if [ -z `ps ax | grep -v grep | grep bt-service` ] ; then export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/app/dbus/user_bus_socket; export TIZEN_PLATFORMLOGGING_MODE=1; export TIZEN_DLOG_LEVEL=1; fi; exec /usr/bin/bt-service'
+User=app

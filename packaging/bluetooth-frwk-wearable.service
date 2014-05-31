@@ -1,0 +1,11 @@
+[Unit]
+Description=Bluetooth service
+
+[Service]
+Type=forking
+ExecStart=/etc/rc.d/init.d/bluetooth-frwk-service
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=graphical.target
+

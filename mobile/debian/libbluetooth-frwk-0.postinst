@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# root case
+if [ ${USER} == "root" ]
+then
+	# Set vconf values with -g/-u options
+
+	# 6520 is vconf_bt
+	vconftool set -t int db/bluetooth/status "0" -g 6520
+	vconftool set -t int file/private/bt-service/flight_mode_deactivated "0" -g 6520
+	vconftool set -t int memory/private/libbluetooth-frwk-0/obex_no_agent "0" -g 6520 -i
+	vconftool set -t string memory/private/libbluetooth-frwk-0/uuid "" -g 6520 -i
+	vconftool set -t string memory/bluetooth/sco_headset_name "" -g 6520 -i
+fi
