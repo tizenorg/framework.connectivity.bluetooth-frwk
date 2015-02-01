@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node name="/">
+	<interface name="org.projectx.btcore">
+		<method name="EnableAdapter">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="DisableAdapter">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="RecoverAdapter">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="ResetAdapter">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="EnableAdapterLe">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="DisableAdapterLe">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+		<method name="EnableCore">
+			<annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+		</method>
+	</interface>
+</node>

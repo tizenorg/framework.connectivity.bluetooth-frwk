@@ -1,2 +1,0 @@
-@PREFIX@/bin/bt-service
-@PREFIX@/share/dbus-1/services/org.projectx.bt.service

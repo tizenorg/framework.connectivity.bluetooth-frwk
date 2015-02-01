@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=org.projectx.bt_core
-Exec=/usr/bin/bt-core
-User=root

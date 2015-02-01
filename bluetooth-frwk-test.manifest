@@ -1,0 +1,13 @@
+<manifest>
+    <define>
+        <domain name="bt-frwk-test"/>
+	<request>
+		<smack request="bt-service::manager" type="w"/>
+		<smack request="bt-service::admin" type="w"/>
+		<smack request="bt-service::gap" type="w"/>
+	</request>
+    </define>
+    <request>
+        <domain name="bt-frwk-test"/>
+    </request>
+</manifest>

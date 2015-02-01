@@ -1,0 +1,47 @@
+<manifest>
+	<define>
+		<domain name="bt-service"/>
+		<provide>
+			<label name="bt-service::public"/>
+			<label name="bt-service::platform"/>
+		</provide>
+		<request>
+			<smack request="system::vconf" type="rwxat"/>
+			<smack request="system::vconf_system" type="rw"/>
+			<smack request="system::vconf_setting" type="rw"/>
+			<smack request="system::vconf_network" type="rw"/>
+			<smack request="system::share" type="rwxat"/>
+			<smack request="system::ext_storage" type="rwxat"/>
+			<smack request="system::media" type="rwxat"/>
+			<smack request="system::homedir" type="rwxat"/>
+			<smack request="dbus" type="rwx"/>
+			<smack request="xorg" type="rwx"/>
+			<smack request="device::app_logging" type="w"/>
+			<smack request="syspopup::db" type="rwx"/>
+			<smack request="device::dialout" type="rw"/>
+			<smack request="sys-assert::core" type="rwxat"/>
+			<smack request="tethering::dbus-access" type="rw"/>
+			<smack request="alarm-server::alarm" type="w"/>
+			<smack request="aul::launch" type="x"/>
+			<smack request="security-server::api-cookie-check" type="w"/>
+			<smack request="connman::get" type="rwx"/>
+			<smack request="connman::set" type="rwx"/>
+			<smack request="connman::profile" type="rwx"/>
+			<smack request="telephony_framework::api_ps_public" type="rw"/>
+			<smack request="factory-reset" type="rwx"/>
+			<smack request="bt-service::public" type="w"/>
+			<smack request="bt-service::platform" type="w"/>
+		</request>
+	</define>
+	<assign>
+		<filesystem path="/etc/init.d/bluetooth-frwk" label="_" exec_label="none" />
+		<filesystem path="/usr/share/dbus-1/services/org.projectx.bt.service" label="_" exec_label="none" />
+		<filesystem path="/opt/etc/dump.d/module.d/bluetooth_log_dump.sh" label="_" exec_label="none"/>
+		<filesystem path="/usr/etc/bluetooth" label="_" exec_label="none"/>
+		<filesystem path="/usr/etc/bluetooth/stack_info" label="_" exec_label="none"/>
+		<filesystem path="/opt/var/lib/bluetooth" label="_" exec_label="none"/>
+	</assign>
+	<request>
+		<domain name="bt-service"/>
+	</request>
+</manifest>

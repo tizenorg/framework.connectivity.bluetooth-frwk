@@ -1,2 +1,0 @@
-@PREFIX@/bin/bluetooth-map-agent
-@PREFIX@/share/dbus-1/services/org.bluez.map_agent.service

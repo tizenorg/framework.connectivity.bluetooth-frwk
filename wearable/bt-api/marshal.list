@@ -1,5 +1,0 @@
-# DBUS Signal argument converting list for bluetooth telephony  lib
-VOID:UINT
-VOID:INT
-VOID:STRING,UINT
-VOID:STRING

@@ -1,8 +1,0 @@
-@PREFIX@/bin/bluetooth-agent
-@PREFIX@/share/dbus-1/services/org.bluez.frwk_agent.service
-/etc/*
-@PREFIX@/bin/bluetooth-pb-agent
-@PREFIX@/share/dbus-1/services/org.bluez.pb_agent.service
-
-@PREFIX@/bin/bluetooth-map-agent
-@PREFIX@/share/dbus-1/services/org.bluez.map_agent.service

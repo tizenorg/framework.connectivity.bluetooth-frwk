@@ -1,0 +1,12 @@
+[Unit]
+Description=Bluetooth service
+After=multi-user.target
+
+[Service]
+Type=dbus
+BusName=org.projectx.bt
+ExecStart=/usr/bin/bt-service
+KillMode=process
+
+[Install]
+WantedBy=graphical.target
