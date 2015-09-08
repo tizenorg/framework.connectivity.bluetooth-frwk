@@ -1,9 +1,0 @@
-#!/bin/sh
-
-#
-# Script for running Bluetooth framework agent during booting time
-#
-
-if [ -x /usr/bin/bluetooth-agent ]; then
-	/usr/bin/bluetooth-agent &
-fi

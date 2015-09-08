@@ -1,3 +1,0 @@
-[D-BUS Service]
-Name=org.bluez.pb_agent
-Exec=/usr/bin/bluetooth-pb-agent

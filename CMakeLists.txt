@@ -1,22 +1,9 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
-# API library
-ADD_SUBDIRECTORY(lib)
+ADD_SUBDIRECTORY(bt-api)
 
-# Bluetooth Telephony API library
-ADD_SUBDIRECTORY(bluetooth-telephony)
+ADD_SUBDIRECTORY(bt-service)
 
-# API library
-ADD_SUBDIRECTORY(bluetooth-media-control)
+ADD_SUBDIRECTORY(bt-core)
 
-# Bluetooth FW Agent
-ADD_SUBDIRECTORY(bluetooth-frwk-agent)
-
-# Phonebook FW Agent
-ADD_SUBDIRECTORY(bluetooth-pb-agent)
-
-# Message FW Agent
-ADD_SUBDIRECTORY(bluetooth-map-agent)
-
-# Bluetooth HFP Agent
-ADD_SUBDIRECTORY(bluetooth-hfp-agent)
+ADD_SUBDIRECTORY(test)

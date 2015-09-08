@@ -1,0 +1,9 @@
+#!/bin/sh
+
+#
+# Script for running BT Service during booting time
+#
+
+if [ -x /usr/bin/bt-core ]; then
+	/usr/bin/bt-core &
+fi

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node name="/">
+  <interface name="org.bluez.MediaPlayer">
+    <method name="SetProperty">
+      <annotation name="org.freedesktop.DBus.GLib.Async" value=""/>
+      <arg type="s" name="property"/>
+      <arg type="v" name="value"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Set">
+      <arg type="s" name="property"/>
+      <arg type="v" name="value"/>
+    </method>
+  </interface>
+</node>

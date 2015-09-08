@@ -1,3 +1,0 @@
-[D-BUS Service]
-Name=org.bluez.map_agent
-Exec=/usr/bin/bluetooth-map-agent
