@@ -122,6 +122,7 @@ static void _bt_hps_send_status_notification(unsigned short http_status,
 			bluetooth_device_address_t *unicast_address)
 {
 	char status[3] = {0x00};
+	int ret = BLUETOOTH_ERROR_NONE;
 
 	BT_DBG("");
 
@@ -132,9 +133,17 @@ static void _bt_hps_send_status_notification(unsigned short http_status,
 	/* Store the status value */
 	_bt_hps_set_char_value(http_status_obj_path, status, 3);
 
-	/* Send nunicast notification */
-	bluetooth_gatt_notify_characteristics_value_change(http_status_obj_path,
-						status, 3, unicast_address);
+	/* Send unicast notification */
+	ret = bluetooth_gatt_server_set_notification(http_status_obj_path, unicast_address);
+	if (ret != BLUETOOTH_ERROR_NONE) {
+		BT_ERR("_bt_hps_send_status_notification failed");
+		return;
+	}
+	ret = bluetooth_gatt_update_characteristic(http_status_obj_path, status, 3);
+	if (ret != BLUETOOTH_ERROR_NONE) {
+		BT_ERR("_bt_hps_send_status_notification failed");
+		return;
+	}
 }
 #endif
 

@@ -548,6 +548,7 @@ typedef enum {
 	BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED, /** <GATT Characteristic/Descriptor Read Request event */
 	BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED, /** <GATT Characteristic/Descriptor Value change event */
 	BLUETOOTH_EVENT_GATT_SERVER_NOTIFICATION_STATE_CHANGED, /** <GATT Characteristic Notification change event */
+	BLUETOOTH_EVENT_GATT_SERVER_INDICATE_CONFIRMED, /** <GATT Characteristic Notification change event */
 
 	BLUETOOTH_EVENT_AG_CONNECTED = BLUETOOTH_EVENT_AUDIO_BASE, /**<AG service connected event*/
 	BLUETOOTH_EVENT_AG_DISCONNECTED, /**<AG service disconnected event*/
@@ -1321,6 +1322,15 @@ typedef struct {
 	gboolean att_notify;
 } bt_gatt_char_notify_change_t;
 
+/**
+ * Structure to Indication confirmation
+ */
+typedef struct {
+	char *att_handle;
+	char *service_handle;
+	char *address;
+	gboolean complete;
+ } bt_gatt_indicate_confirm_t;
 
 /**
  * Structure to RSSI Signal Strength Alert
@@ -5119,6 +5129,26 @@ int bluetooth_gatt_unregister_service(const char *svc_path);
 int bluetooth_gatt_send_response(int request_id, guint req_type,
 				int resp_state, int offset, char *value, int value_length);
 
+/* @fn bluetooth_gatt_server_set_notification(const char *char_path)
+*
+* @brief Sets the notification property for a characteristic.
+*
+* This function is a synchronous call.
+*
+* @return	BLUETOOTH_ERROR_NONE	- Success \n
+*	 BLUETOOTH_ERROR_INTERNAL - Internal Error \n
+*	 BLUETOOTH_ERROR_INVALID_PARAM -Invalid Parameters \n
+*	 BLUETOOTH_ERROR_DEVICE_NOT_ENABLED - Adapter is disabled \n
+*
+* @exception	 None
+* @param[in] char_path characteristic object path.
+* @param[in]   unicast_address remote device address. if set notification is sent to only one device.
+*
+* @remark  Adapter should be enabled
+* @see	bluetooth_gatt_update_characteristic()
+*/
+int bluetooth_gatt_server_set_notification(const char *char_path,
+				bluetooth_device_address_t *unicast_address);
 
 /* @fn int bluetooth_gatt_delete_services(void)
 *
@@ -5142,9 +5172,7 @@ int bluetooth_gatt_send_response(int request_id, guint req_type,
 */
 int bluetooth_gatt_delete_services(void);
 
-/* @fn int bluetooth_gatt_notify_characteristics_value_change(const char *char_path,
-*		const char* char_value, int value_length,
-*		bluetooth_device_address_t *address)
+/* @fn int bluetooth_gatt_update_characteristic(void)
 *
 * @brief updates the given characteristic with a new value
 *
@@ -5156,10 +5184,6 @@ int bluetooth_gatt_delete_services(void);
 *	 BLUETOOTH_ERROR_DEVICE_NOT_ENABLED - Adapter is disabled \n
 *
 * @exception	 None
-* @param[out] characteristic characteristic object path..
-* @param[in]   char_value Value of the GATT characteristic to be added.
-* @param[in]   value_length length of the chantacteristic value.
-* @param[in]   unicast_address remote device address. if set notification is sent to only one device.
 *
 * @remark  Adapter should be enabled
 * @see	bluetooth_gatt_add_service()
@@ -5168,9 +5192,8 @@ int bluetooth_gatt_delete_services(void);
 * @see bluetooth_gatt_register_service()
 * @see bluetooth_gatt_unregister_service()
 */
-int bluetooth_gatt_notify_characteristics_value_change(const char *char_path,
-		const char* char_value, int value_length,
-		bluetooth_device_address_t *unicast_address);
+int bluetooth_gatt_update_characteristic(const char *char_path,
+		const char* char_value, int value_length);
 
 /**
  * @fn int bluetooth_set_advertising(int handle, gboolean enable);

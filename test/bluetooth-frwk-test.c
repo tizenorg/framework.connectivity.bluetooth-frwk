@@ -1203,8 +1203,8 @@ int test_input_callback(void *data)
 		case 98: {
 			char char_data[4] = {10, 20, 30, 40};
 			int char_length = 4;
-			ret = bluetooth_gatt_notify_characteristics_value_change(char_obj_path,
-						char_data, char_length, NULL);
+			ret = bluetooth_gatt_update_characteristic(char_obj_path,
+						char_data, char_length);
 
 			TC_PRT("update_characteristic error is %d", ret);
 
