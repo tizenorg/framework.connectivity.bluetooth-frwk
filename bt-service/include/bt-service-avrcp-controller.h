@@ -27,8 +27,7 @@
 
 #include <glib.h>
 #include <sys/types.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
+#include <gio/gio.h>
 
 #include "bluetooth-api.h"
 #include "bluetooth-media-control.h"
@@ -48,7 +47,7 @@ int _bt_avrcp_control_get_property(int type, unsigned int *value);
 
 int _bt_avrcp_control_get_track_info(media_metadata_attributes_t *metadata);
 
-void _bt_handle_avrcp_control_event(DBusMessageIter *msg_iter, const char *path);
+void _bt_handle_avrcp_control_event(GVariant *reply, const char *path);
 
 void _bt_set_control_device_path(const char *path);
 

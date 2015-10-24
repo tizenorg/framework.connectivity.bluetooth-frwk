@@ -166,21 +166,7 @@ static rfcomm_conn_info_t *__get_conn_info_from_fd(rfcomm_cb_data_t *info,
 	}
 	return NULL;
 }
-#if 0
-/* It's not used */
-static rfcomm_conn_info_t * __get_conn_info_for_disconnection(
-	rfcomm_cb_data_t *info)
-{
-	GSList *l;
-	rfcomm_conn_info_t *device_node = NULL;
-	for(l = info->rfcomm_conns; l != NULL; l = l->next) {
-		device_node = l->data;
-		if (device_node && device_node->disconnected == TRUE)
-			return device_node;
-	}
-	return NULL;
-}
-#endif
+
 static rfcomm_conn_info_t *__get_conn_info_from_address(rfcomm_cb_data_t *info,
 		char *dev_address)
 {
@@ -457,7 +443,7 @@ int new_connection(const char *path, int fd, bluetooth_device_address_t *addr)
 	return 0;
 }
 
-static void __bt_connect_response_cb(DBusGProxy *proxy, DBusGProxyCall *call,
+static void __bt_connect_response_cb(GDBusProxy *proxy, GAsyncResult *res,
 							gpointer user_data)
 
 {
@@ -471,32 +457,33 @@ static void __bt_connect_response_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 
 	cb_data = user_data;
 
-	if (!dbus_g_proxy_end_call(proxy, call, &error, G_TYPE_INVALID)) {
+	if (!g_dbus_proxy_call_finish(proxy, res, &error)) {
 		int result;
-
+		g_dbus_error_strip_remote_error(error);
 		BT_ERR("Error : %s \n", error->message);
 
 		if (g_strcmp0(error->message, "In Progress") == 0)
 			result = BLUETOOTH_ERROR_DEVICE_BUSY;
 		else
 			result = BLUETOOTH_ERROR_INTERNAL;
-		path = dbus_g_proxy_get_path(proxy);
+		path = g_dbus_proxy_get_object_path(proxy);
 		_bt_convert_device_path_to_address(path, dev_address);
 		__rfcomm_client_connected_cb(cb_data, dev_address, result);
 
 		g_error_free(error);
-		g_object_unref(proxy);
 	}
+	if (proxy)
+		g_object_unref(proxy);
+
 	BT_DBG("-");
 }
 
-static void __bt_discover_service_response_cb(DBusGProxy *proxy,
-				DBusGProxyCall *call, gpointer user_data)
+static void __bt_discover_service_response_cb(GDBusProxy *proxy,
+				GAsyncResult *res, gpointer user_data)
 {
 	rfcomm_cb_data_t *cb_data;
 	int ret = 0;
 	GError *err = NULL;
-	GHashTable *hash = NULL;
 	bt_register_profile_info_t info = {0};
 	int result = BLUETOOTH_ERROR_NONE;
 	char dev_address[BT_ADDRESS_STRING_SIZE];
@@ -508,15 +495,16 @@ static void __bt_discover_service_response_cb(DBusGProxy *proxy,
 
 	cb_data = user_data;
 
-	path = dbus_g_proxy_get_path(proxy);
+	path = g_dbus_proxy_get_object_path(proxy);
+
 	_bt_convert_device_path_to_address(path, dev_address);
 	BT_DBG("Device Adress [%s]", dev_address);
-	dbus_g_proxy_end_call(proxy, call, &err,
-			dbus_g_type_get_map("GHashTable",
-		  G_TYPE_UINT, G_TYPE_STRING), &hash,
-		  G_TYPE_INVALID);
-	g_object_unref(proxy);
+	g_dbus_proxy_call_finish(proxy, res, &err);
+	if (proxy)
+		g_object_unref(proxy);
+
 	if (err != NULL) {
+		g_dbus_error_strip_remote_error(err);
 		BT_ERR("Error occured in Proxy call [%s]\n", err->message);
 		if (!strcmp("Operation canceled", err->message)) {
 			result = BLUETOOTH_ERROR_CANCEL_BY_USER;
@@ -563,9 +551,7 @@ static void __bt_discover_service_response_cb(DBusGProxy *proxy,
 	}
 done:
 	if (err)
-		g_error_free(err);
-	if (hash)
-		g_hash_table_destroy(hash);
+		g_clear_error(&err);
 }
 
 BT_EXPORT_API int bluetooth_rfcomm_connect(
@@ -824,6 +810,13 @@ BT_EXPORT_API int bluetooth_rfcomm_write(int fd, const char *buf, int length)
 	int result;
 
 	BT_CHECK_PARAMETER(buf, return);
+	if (fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
+
+	BT_DBG("FD : %d", fd);
+
 #ifndef RFCOMM_DIRECT
 	BT_CHECK_ENABLED(return);
 #endif

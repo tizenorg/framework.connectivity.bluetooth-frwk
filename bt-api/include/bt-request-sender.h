@@ -40,7 +40,7 @@ typedef struct {
 	void *user_data;
 } bt_req_info_t;
 
-void _bt_deinit_proxys(void);
+void _bt_gdbus_deinit_proxys(void);
 
 int _bt_sync_send_request(int service_type, int service_function,
 			GArray *in_param1, GArray *in_param2,

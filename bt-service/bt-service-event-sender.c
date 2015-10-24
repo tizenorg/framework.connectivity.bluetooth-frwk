@@ -21,28 +21,53 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
 #include <glib.h>
 #include <dlog.h>
-
+#include <gio/gio.h>
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
 
 #include "bt-service-common.h"
 #include "bt-service-event.h"
 
-static DBusConnection *event_conn;
-static DBusConnection *hf_local_term_event_conn;
+static GDBusConnection *event_conn;
+static GDBusConnection *hf_local_term_event_conn;
 
-int _bt_send_event(int event_type, int event, int type, ...)
+#ifdef HPS_FEATURE
+int _bt_send_to_hps(void)
+{
+	gboolean ret = FALSE;
+	GError *error = NULL;
+
+	BT_DBG(" ");
+
+	retv_if(event_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	ret = g_dbus_connection_emit_signal(event_conn, NULL,
+					"/org/projectx/httpproxy",
+					"org.projectx.httpproxy_service",
+					BT_LE_ENABLED,
+					NULL, &error);
+	if (!ret) {
+		if (error != NULL) {
+			BT_ERR("D-Bus API failure: errCode[%x], \
+					message[%s]",
+					error->code, error->message);
+			g_clear_error(&error);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	return BLUETOOTH_ERROR_NONE;
+}
+#endif
+
+int _bt_send_event(int event_type, int event, GVariant *param)
 {
 	BT_DBG("+");
-
-	DBusMessage *msg;
 	char *path;
 	char *signal;
-	va_list arguments;
+	GDBusMessage *msg1 = NULL;
 
 	retv_if(event_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
@@ -88,9 +113,9 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BT_RFCOMM_SERVER_EVENT:
 		path = BT_RFCOMM_SERVER_PATH;
 		break;
-	case BT_A2DP_SOURCE_EVENT:
-		path = BT_A2DP_SOURCE_PATH;
-		break;
+        case BT_A2DP_SOURCE_EVENT:
+                path = BT_A2DP_SOURCE_PATH;
+                break;
 	default:
 		BT_ERR("Unknown event");
 		return BLUETOOTH_ERROR_INTERNAL;
@@ -175,6 +200,18 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BLUETOOTH_EVENT_RAW_RSSI:
 		signal = BT_RAW_RSSI_EVENT;
 		break;
+	case BLUETOOTH_EVENT_KEYBOARD_PASSKEY_DISPLAY:
+		signal = BT_KBD_PASSKEY_DISPLAY_REQ_RECEIVED;
+		break;
+	case BLUETOOTH_EVENT_PIN_REQUEST:
+		signal = BT_PIN_REQ_RECEIVED;
+		break;
+	case BLUETOOTH_EVENT_PASSKEY_REQUEST:
+		signal = BT_PASSKEY_REQ_RECEIVED;
+		break;
+	case BLUETOOTH_EVENT_PASSKEY_CONFIRM_REQUEST:
+		signal = BT_PASSKEY_CFM_REQ_RECEIVED;
+		break;
 	case BLUETOOTH_EVENT_SERVICE_SEARCHED:
 		signal = BT_SERVICE_SEARCHED;
 		break;
@@ -224,14 +261,6 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BLUETOOTH_EVENT_AV_DISCONNECTED:
 		signal = BT_STEREO_HEADSET_DISCONNECTED;
 		BT_INFO_C("Disconnected [A2DP]");
-		break;
-	case BLUETOOTH_EVENT_AV_SOURCE_CONNECTED:
-		signal = BT_A2DP_SOURCE_CONNECTED;
-		BT_INFO_C("Connected [A2DP Source]");
-		break;
-	case BLUETOOTH_EVENT_AV_SOURCE_DISCONNECTED:
-		signal = BT_A2DP_SOURCE_DISCONNECTED;
-		BT_INFO_C("Disconnected [A2DP Source]");
 		break;
 	case BLUETOOTH_EVENT_AG_AUDIO_CONNECTED:
 		signal = BT_SCO_CONNECTED;
@@ -314,6 +343,14 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BLUETOOTH_EVENT_DEVICE_DISCONNECTED:
 		signal = BT_DEVICE_DISCONNECTED;
 		break;
+	case BLUETOOTH_EVENT_AV_SOURCE_CONNECTED:
+		signal = BT_A2DP_SOURCE_CONNECTED;
+		BT_INFO_C("Connected [A2DP Source]");
+		break;
+    case BLUETOOTH_EVENT_AV_SOURCE_DISCONNECTED:
+        signal = BT_A2DP_SOURCE_DISCONNECTED;
+        BT_INFO_C("Disconnected [A2DP Source]");
+        break;
 	case BLUETOOTH_EVENT_AVRCP_CONNECTED:
 	case BLUETOOTH_EVENT_AVRCP_CONTROL_CONNECTED:
 		signal = BT_AVRCP_CONNECTED;
@@ -355,8 +392,17 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	case BLUETOOTH_EVENT_GATT_DISCONNECTED:
 		signal = BT_GATT_DISCONNECTED;
 		break;
-	case BLUETOOTH_EVENT_GATT_CHAR_VAL_CHANGED:
-		signal = BT_GATT_CHAR_VAL_CHANGED;
+	case BLUETOOTH_EVENT_IPSP_INIT_STATE_CHANGED:
+		signal = BT_IPSP_INITIALIZED;
+		break;
+	case BLUETOOTH_EVENT_IPSP_CONNECTED:
+		signal = BT_IPSP_CONNECTED;
+		break;
+	case BLUETOOTH_EVENT_IPSP_DISCONNECTED:
+		signal = BT_IPSP_DISCONNECTED;
+		break;
+	case BLUETOOTH_EVENT_LE_DATA_LENGTH_CHANGED:
+		signal = BT_LE_DATA_LENGTH_CHANGED;
 		break;
 	default:
 		BT_ERR("Unknown event");
@@ -366,52 +412,33 @@ int _bt_send_event(int event_type, int event, int type, ...)
 	BT_DBG("Path : %s", path);
 	BT_INFO_C("Signal : %s", signal);
 
-	msg = dbus_message_new_signal(path, BT_EVENT_SERVICE,
-				signal);
-
-	if (msg == NULL) {
-		BT_ERR("Message is NULL");
-		return BLUETOOTH_ERROR_INTERNAL;
+	msg1 = g_dbus_message_new_signal(path, BT_EVENT_SERVICE, signal);
+	g_dbus_message_set_body(msg1, param);
+	if (!g_dbus_connection_send_message(event_conn, msg1,G_DBUS_SEND_MESSAGE_FLAGS_NONE, 0, NULL)) {
+		BT_ERR("Error while sending");
 	}
 
-	if (type) {
-		/* Set the arguments of the dbus message */
-		va_start(arguments, type);
+	g_object_unref(msg1);
 
-		if (!dbus_message_append_args_valist(msg, type, arguments)) {
-			dbus_message_unref(msg);
-			va_end(arguments);
-			return BLUETOOTH_ERROR_INTERNAL;
-		}
-
-		va_end(arguments);
-	}
-
-	if (!dbus_connection_send(event_conn, msg, NULL)) {
-		BT_ERR("send failed");
-		dbus_message_unref(msg);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_connection_flush(event_conn);
-	dbus_message_unref(msg);
-
-	BT_DBG("-");
+#ifdef HPS_FEATURE
+	if (g_strcmp0(signal, BT_LE_ENABLED) == 0)
+		_bt_send_to_hps();
+#endif
 
 	return BLUETOOTH_ERROR_NONE;
 }
 
-int _bt_send_event_to_dest(const char* dest, int event_type, int event, int type, ...)
+int _bt_send_event_to_dest(const char* dest, int event_type,
+		int event, GVariant *param)
 {
 	BT_DBG("+");
-
-	DBusMessage *msg;
 	char *path;
 	char *signal;
-	va_list arguments;
+	GError *error = NULL;
 
 	retv_if(event_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
+	BT_DBG("dest : %s", dest);
 	BT_DBG("event_type [%d], event [%d]", event_type, event);
 
 	switch (event_type) {
@@ -420,6 +447,9 @@ int _bt_send_event_to_dest(const char* dest, int event_type, int event, int type
 		break;
 	case BT_LE_ADAPTER_EVENT:
 		path = BT_LE_ADAPTER_PATH;
+		break;
+	case BT_DEVICE_EVENT:
+                path = BT_DEVICE_PATH;
 		break;
 	default:
 		BT_ERR("Unknown event");
@@ -442,6 +472,9 @@ int _bt_send_event_to_dest(const char* dest, int event_type, int event, int type
 	case BLUETOOTH_EVENT_LE_DISCOVERY_FINISHED:
 		signal = BT_LE_DISCOVERY_FINISHED;
 		break;
+	case BLUETOOTH_EVENT_GATT_CHAR_VAL_CHANGED:
+		signal = BT_GATT_CHAR_VAL_CHANGED;
+		break;
 	default:
 		BT_ERR("Unknown event");
 		return BLUETOOTH_ERROR_INTERNAL;
@@ -450,68 +483,38 @@ int _bt_send_event_to_dest(const char* dest, int event_type, int event, int type
 	BT_DBG("Path : %s", path);
 	BT_INFO_C("Signal : %s", signal);
 
-	msg = dbus_message_new_signal(path, BT_EVENT_SERVICE,
-				signal);
-
-	if (msg == NULL) {
-		BT_ERR("Message is NULL");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	if (dbus_message_set_destination(msg, dest) == FALSE)
-		BT_ERR("Setting destination is failed");
-
-	if (type) {
-		/* Set the arguments of the dbus message */
-		va_start(arguments, type);
-
-		if (!dbus_message_append_args_valist(msg, type, arguments)) {
-			dbus_message_unref(msg);
-			va_end(arguments);
-			return BLUETOOTH_ERROR_INTERNAL;
+	if (!g_dbus_connection_emit_signal(event_conn, dest, path, BT_EVENT_SERVICE,
+			signal, param, &error)) {
+		BT_ERR("Error while sending Signal: %s", signal);
+		if (error) {
+			BT_ERR("Error Code [%d], Error Message [%s]",
+					error->code, error->message);
+			g_clear_error(&error);
 		}
-
-		va_end(arguments);
 	}
-
-	if (!dbus_connection_send(event_conn, msg, NULL)) {
-		BT_ERR("send failed");
-		dbus_message_unref(msg);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_connection_flush(event_conn);
-	dbus_message_unref(msg);
 
 	BT_DBG("-");
-
 	return BLUETOOTH_ERROR_NONE;
 }
 
 int _bt_send_hf_local_term_event(char *address)
 {
-	DBusMessage *msg;
-	char *signal = BT_HF_LOCAL_TERM;
+	GError *error = NULL;
 
 	retv_if(hf_local_term_event_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	msg = dbus_message_new_signal(BT_HF_LOCAL_TERM_EVENT_PATH,
-			BT_HF_LOCAL_TERM_EVENT_INTERFACE, signal);
-	if (msg == NULL) {
-		BT_ERR("Message is NULL\n");
-		return BLUETOOTH_ERROR_INTERNAL;
+	if (!g_dbus_connection_emit_signal(hf_local_term_event_conn, NULL,
+			BT_HF_LOCAL_TERM_EVENT_PATH,
+			BT_HF_LOCAL_TERM_EVENT_INTERFACE,
+			BT_HF_LOCAL_TERM, g_variant_new("s", address),
+			&error)) {
+		BT_ERR("Error while sending Signal: %s", signal);
+		if (error) {
+			BT_ERR("Error Code [%d], Error Message [%s]",
+					error->code, error->message);
+			g_clear_error(&error);
+		}
 	}
-
-	dbus_message_append_args(msg, DBUS_TYPE_STRING, &address, DBUS_TYPE_INVALID);
-
-	if (!dbus_connection_send(hf_local_term_event_conn, msg, NULL)) {
-		BT_ERR("send failed\n");
-		dbus_message_unref(msg);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_connection_flush(hf_local_term_event_conn);
-	dbus_message_unref(msg);
 
 	return BLUETOOTH_ERROR_NONE;
 }
@@ -519,68 +522,59 @@ int _bt_send_hf_local_term_event(char *address)
 /* To send the event from service daemon to application*/
 int _bt_init_service_event_sender(void)
 {
-	DBusConnection *conn;
-	DBusError err;
-	int ret;
+	GDBusConnection *conn;
+	GError *err = NULL;
 
 	if (event_conn) {
 		BT_ERR("Event handler is already exist");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, NULL);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_error_init(&err);
-
-	ret = dbus_bus_request_name(conn, BT_EVENT_SERVICE,
-				DBUS_NAME_FLAG_REPLACE_EXISTING, &err);
-
-	if (ret != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
-		if (dbus_error_is_set(&err) == TRUE) {
-			BT_ERR("Event init failed, %s", err.message);
-			dbus_error_free(&err);
+	if (conn == NULL) {
+		BT_ERR("conn == NULL");
+		if (err) {
+			BT_ERR("Code[%d], Message[%s]",
+					err->code, err->message);
+			g_clear_error(&err);
 		}
+
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
 	event_conn = conn;
-
 	return BLUETOOTH_ERROR_NONE;
 }
 
 void _bt_deinit_service_event_sender(void)
 {
 	if (event_conn) {
-		dbus_connection_close(event_conn);
+		g_object_unref(event_conn);
 		event_conn = NULL;
 	}
 }
 
 int _bt_init_hf_local_term_event_sender(void)
 {
-	DBusConnection *conn;
-	DBusError err;
-	int ret;
+	GDBusConnection *conn;
+	GError *err = NULL;
 
 	if (hf_local_term_event_conn) {
 		BT_ERR("Event handler is already exist");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	conn = dbus_bus_get_private(DBUS_BUS_SYSTEM, NULL);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_error_init(&err);
-
-	ret = dbus_bus_request_name(conn, BT_HF_LOCAL_TERM_EVENT_INTERFACE,
-				DBUS_NAME_FLAG_REPLACE_EXISTING, &err);
-
-	if (ret != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
-		if (dbus_error_is_set(&err) == TRUE) {
-			BT_ERR("Event init failed, %s", err.message);
-			dbus_error_free(&err);
+	if (conn == NULL) {
+		BT_ERR("conn == NULL");
+		if (err) {
+			BT_ERR("Code[%d], Message[%s]",
+					err->code, err->message);
+			g_clear_error(&err);
 		}
+
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
@@ -592,7 +586,7 @@ int _bt_init_hf_local_term_event_sender(void)
 void _bt_deinit_hf_local_term_event_sender(void)
 {
 	if (hf_local_term_event_conn) {
-		dbus_connection_close(hf_local_term_event_conn);
+		g_object_unref(hf_local_term_event_conn);
 		hf_local_term_event_conn = NULL;
 	}
 }

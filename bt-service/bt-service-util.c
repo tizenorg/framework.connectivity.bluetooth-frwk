@@ -22,10 +22,9 @@
  */
 
 #include <string.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
 #include <glib.h>
 #include <dlog.h>
+#include <gio/gio.h>
 
 #include "bluetooth-api.h"
 #include "bt-service-common.h"
@@ -88,7 +87,7 @@ void _bt_init_request_list(void)
 
 /* insert request next to head */
 int _bt_insert_request_list(int req_id, int service_function,
-			char *name, DBusGMethodInvocation *context)
+			char *name, GDBusMethodInvocation *context)
 {
 	request_info_t *info;
 

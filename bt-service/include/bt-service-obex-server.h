@@ -80,6 +80,8 @@ void _bt_obex_transfer_connected(void);
 
 void _bt_obex_transfer_disconnected(void);
 
+int _bt_obex_get_native_pid(void);
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

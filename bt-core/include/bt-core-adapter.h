@@ -28,13 +28,10 @@
 #include <sys/wait.h>
 #include <dlog.h>
 #include <glib.h>
-#include <glib-object.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define BT_CORE_TYPE (bt_core_get_type())
 
 typedef enum {
 	BT_DEACTIVATED,
@@ -75,7 +72,15 @@ int _bt_core_service_request_adapter(int service_function);
 
 void _bt_core_adapter_added_cb(void);
 void _bt_core_adapter_removed_cb(void);
-GType bt_core_get_type (void);
+
+gboolean _bt_core_enable_adapter(void);
+gboolean _bt_core_disable_adapter(void);
+gboolean _bt_core_recover_adapter(void);
+gboolean _bt_core_enable_adapter_le(void);
+gboolean _bt_core_disable_adapter_le(void);
+gboolean __bt_core_reset_adapter(void);
+gboolean _bt_core_enable_core(void);
+gboolean _bt_core_factory_test_mode(const char *type, const char *arg);
 
 void _bt_core_update_status(void);
 

@@ -470,6 +470,11 @@ BT_EXPORT_API int bluetooth_rfcomm_remove_socket(int socket_fd)
 		return BLUETOOTH_ERROR_PERMISSION_DEINED;
 	}
 
+	if (socket_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
+
 #ifdef RFCOMM_DIRECT
 	BT_INFO("<<<<<<<<< RFCOMM Remove socket request from app, fd=[%d] >>>>>>>>>>>", socket_fd);
 
@@ -544,6 +549,10 @@ BT_EXPORT_API int bluetooth_rfcomm_server_disconnect(int socket_fd)
 	char address[20];
 
 	BT_INFO(">>>>>>>>RFCOMM server disconnect request from APP>>>>>>>>>");
+	if (socket_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 
 	info = __find_rfcomm_info_with_fd(socket_fd);
 	if (info == NULL)
@@ -658,6 +667,10 @@ BT_EXPORT_API int bluetooth_rfcomm_listen_and_accept(int socket_fd, int max_pend
 #endif
 
 	BT_CHECK_ENABLED(return);
+	if (socket_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 
 #ifdef RFCOMM_DIRECT
 	BT_INFO("<<<<<<<<< RFCOMM Listen & accept from app >>>>>>>>>>>");
@@ -741,6 +754,10 @@ BT_EXPORT_API int bluetooth_rfcomm_listen(int socket_fd, int max_pending_connect
 #endif
 
 	BT_CHECK_ENABLED(return);
+	if (socket_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 
 #ifdef RFCOMM_DIRECT
 	BT_INFO("<<<<<<<<< RFCOMM Listen >>>>>>>>>>>");
@@ -795,6 +812,10 @@ BT_EXPORT_API int bluetooth_rfcomm_accept_connection(int server_fd)
 	int result;
 
 	BT_CHECK_ENABLED(return);
+	if (server_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
@@ -816,6 +837,11 @@ BT_EXPORT_API int bluetooth_rfcomm_reject_connection(int server_fd)
 	int result;
 
 	BT_CHECK_ENABLED(return);
+
+	if (server_fd < 0) {
+		BT_ERR("Invalid FD");
+		return BLUETOOTH_ERROR_INVALID_PARAM;
+	}
 
 	BT_INFO("+");
 

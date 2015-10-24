@@ -295,7 +295,7 @@ BT_EXPORT_API int bluetooth_get_discoverable_mode(bluetooth_discoverable_mode_t 
 	if (bluetooth_check_adapter() == BLUETOOTH_ADAPTER_DISABLED) {
 		if (vconf_get_int(BT_FILE_VISIBLE_TIME, &timeout) != 0) {
 			BT_ERR("Fail to get the timeout value");
-			return BLUETOOTH_ERROR_INTERNAL;
+			return BLUETOOTH_ERROR_DEVICE_NOT_ENABLED;
 		}
 
 		if (timeout == -1) {
@@ -306,6 +306,8 @@ BT_EXPORT_API int bluetooth_get_discoverable_mode(bluetooth_discoverable_mode_t 
 
 		return BLUETOOTH_ERROR_NONE;
 	}
+#else
+	BT_CHECK_ENABLED(return);
 #endif
 
 	BT_INIT_PARAMS();

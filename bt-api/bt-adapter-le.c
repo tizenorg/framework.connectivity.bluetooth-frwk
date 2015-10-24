@@ -574,3 +574,111 @@ BT_EXPORT_API int bluetooth_le_unregister_callback(void)
 
 	return BLUETOOTH_ERROR_NONE;
 }
+
+BT_EXPORT_API int bluetooth_le_read_maximum_data_length(
+			bluetooth_le_read_maximum_data_length_t *max_le_datalength)
+{
+	BT_CHECK_ENABLED_ANY(return);
+	BT_INIT_PARAMS();
+	int result;
+	bluetooth_le_read_maximum_data_length_t *datalength = NULL;
+
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+		BT_LE_READ_MAXIMUM_DATA_LENGTH,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result == BLUETOOTH_ERROR_NONE) {
+		datalength = &g_array_index(out_param,
+			bluetooth_le_read_maximum_data_length_t, 0);
+		max_le_datalength->max_tx_octets  = datalength->max_tx_octets;
+		max_le_datalength->max_tx_time = datalength->max_tx_time;
+		max_le_datalength->max_rx_octets = datalength->max_rx_octets;
+		max_le_datalength->max_rx_time = datalength->max_rx_time;
+	}
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_le_write_host_suggested_default_data_length(
+	const unsigned int def_tx_Octets, const unsigned int def_tx_Time)
+{
+	BT_CHECK_ENABLED_ANY(return);
+	BT_INIT_PARAMS();
+
+	int result;
+
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, &def_tx_Octets, sizeof(guint));
+	g_array_append_vals(in_param2, &def_tx_Time, sizeof(guint));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+		BT_LE_WRITE_HOST_SUGGESTED_DATA_LENGTH,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result != BLUETOOTH_ERROR_NONE) {
+		BT_ERR("Failed to Write the host suggested default data length values : %d", result);
+	}
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_le_read_suggested_default_data_length(
+	bluetooth_le_read_host_suggested_data_length_t *le_data_length)
+{
+	BT_CHECK_ENABLED_ANY(return);
+	BT_INIT_PARAMS();
+
+	int result;
+	bluetooth_le_read_host_suggested_data_length_t *data_values = NULL;
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+		BT_LE_READ_HOST_SUGGESTED_DATA_LENGTH,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result == BLUETOOTH_ERROR_NONE) {
+		data_values = &g_array_index(out_param,
+			bluetooth_le_read_host_suggested_data_length_t, 0);
+
+		le_data_length->def_tx_octets = data_values->def_tx_octets;
+		le_data_length->def_tx_time = data_values->def_tx_time;
+	}
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_le_set_data_length(bluetooth_device_address_t *address,
+	const unsigned int max_tx_octets, const unsigned int max_tx_time)
+{
+	BT_CHECK_ENABLED_ANY(return);
+	BT_INIT_PARAMS();
+
+	int result;
+
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, address, sizeof(bluetooth_device_address_t));
+	g_array_append_vals(in_param2, &max_tx_octets, sizeof(guint));
+	g_array_append_vals(in_param3, &max_tx_time, sizeof(guint));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+		BT_LE_SET_DATA_LENGTH,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result != BLUETOOTH_ERROR_NONE) {
+		BT_ERR("Failed to Set data length values : %d", result);
+	}
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}

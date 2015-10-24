@@ -21,9 +21,6 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
-#include <dbus/dbus.h>
 #include <glib.h>
 #include <string.h>
 #include <dlog.h>

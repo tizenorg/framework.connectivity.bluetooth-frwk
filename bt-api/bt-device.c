@@ -320,6 +320,7 @@ BT_EXPORT_API int bluetooth_is_device_connected(const bluetooth_device_address_t
 BT_EXPORT_API int bluetooth_connect_le(const bluetooth_device_address_t *device_address, gboolean auto_connect)
 {
 	int result;
+	bt_user_info_t *user_info;
 
 	BT_CHECK_PARAMETER(device_address, return);
 	BT_CHECK_ENABLED_ANY(return);
@@ -330,8 +331,12 @@ BT_EXPORT_API int bluetooth_connect_le(const bluetooth_device_address_t *device_
 	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
 	g_array_append_vals(in_param2, &auto_connect, sizeof(gboolean));
 
-	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_CONNECT_LE,
-		in_param1, in_param2, in_param3, in_param4, &out_param);
+	user_info = _bt_get_user_data(BT_COMMON);
+	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	result = _bt_send_request_async(BT_BLUEZ_SERVICE, BT_CONNECT_LE,
+		in_param1, in_param2, in_param3, in_param4,
+		user_info->cb, user_info->user_data);
 
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
@@ -341,6 +346,7 @@ BT_EXPORT_API int bluetooth_connect_le(const bluetooth_device_address_t *device_
 BT_EXPORT_API int bluetooth_disconnect_le(const bluetooth_device_address_t *device_address)
 {
 	int result;
+	bt_user_info_t *user_info;
 
 	BT_CHECK_PARAMETER(device_address, return);
 	BT_CHECK_ENABLED_ANY(return);
@@ -350,8 +356,12 @@ BT_EXPORT_API int bluetooth_disconnect_le(const bluetooth_device_address_t *devi
 
 	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
 
-	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_DISCONNECT_LE,
-		in_param1, in_param2, in_param3, in_param4, &out_param);
+	user_info = _bt_get_user_data(BT_COMMON);
+	retv_if(user_info == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	result = _bt_send_request_async(BT_BLUEZ_SERVICE, BT_DISCONNECT_LE,
+		in_param1, in_param2, in_param3, in_param4,
+		user_info->cb, user_info->user_data);
 
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
@@ -399,7 +409,7 @@ BT_EXPORT_API int bluetooth_get_rssi_strength(const bluetooth_device_address_t *
 }
 
 BT_EXPORT_API int bluetooth_le_conn_update(const bluetooth_device_address_t *address,
-					const bluetooth_le_conn_update_t *parameters)
+					const bluetooth_le_connection_param_t *parameters)
 {
 	int result;
 
@@ -413,7 +423,7 @@ BT_EXPORT_API int bluetooth_le_conn_update(const bluetooth_device_address_t *add
 	g_array_append_vals(in_param1, address,
 			sizeof(bluetooth_device_address_t));
 	g_array_append_vals(in_param2, parameters,
-			sizeof(bluetooth_le_conn_update_t));
+			sizeof(bluetooth_le_connection_param_t));
 
 	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_LE_CONN_UPDATE,
 			in_param1, in_param2, in_param3, in_param4, &out_param);
@@ -444,6 +454,115 @@ BT_EXPORT_API int bluetooth_get_connected_link_type(
 		*connected = g_array_index(out_param, guint, 0);
 	}
 
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_set_pin_code(
+		const bluetooth_device_address_t *device_address,
+		const bluetooth_device_pin_code_t *pin_code)
+{
+	int result;
+
+	BT_CHECK_PARAMETER(device_address, return);
+	BT_CHECK_PARAMETER(pin_code, return);
+	BT_CHECK_ENABLED(return);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
+	g_array_append_vals(in_param2, pin_code, sizeof(bluetooth_device_pin_code_t));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_SET_PIN_CODE,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_unset_pin_code(
+		const bluetooth_device_address_t *device_address)
+{
+	int result;
+
+	BT_CHECK_PARAMETER(device_address, return);
+	BT_CHECK_ENABLED(return);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, device_address, sizeof(bluetooth_device_address_t));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_UNSET_PIN_CODE,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_update_le_connection_mode(const bluetooth_device_address_t *address,
+		const bluetooth_le_connection_mode_t mode)
+{
+	int result;
+
+	BT_CHECK_ENABLED(return);
+	BT_CHECK_PARAMETER(address, return);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_array_append_vals(in_param1, address,
+			sizeof(bluetooth_device_address_t));
+	g_array_append_vals(in_param2, &mode,
+			sizeof(bluetooth_le_connection_mode_t));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_UPDATE_LE_CONNECTION_MODE,
+			in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_passkey_reply(char *passkey, gboolean reply)
+{
+	int result;
+
+	char str_passkey[BLUETOOTH_DEVICE_PASSKEY_LENGTH_MAX];
+
+	BT_CHECK_PARAMETER(passkey, return);
+	BT_CHECK_ENABLED(return);
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	g_strlcpy(str_passkey, passkey, sizeof(str_passkey));
+	g_array_append_vals(in_param1, str_passkey, BLUETOOTH_DEVICE_PASSKEY_LENGTH_MAX);
+	g_array_append_vals(in_param2, &reply, sizeof(gboolean));
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_PASSKEY_REPLY,
+		in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	return result;
+}
+
+BT_EXPORT_API int bluetooth_passkey_confirmation_reply(gboolean reply)
+{
+	int result;
+
+	BT_CHECK_ENABLED(return);
+	BT_INIT_PARAMS();
+
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+	g_array_append_vals(in_param1, &reply, sizeof(gboolean));
+	result = _bt_send_request(BT_BLUEZ_SERVICE, BT_PASSKEY_CONFIRMATION_REPLY,
+			in_param1, in_param2, in_param3, in_param4, &out_param);
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
 	return result;

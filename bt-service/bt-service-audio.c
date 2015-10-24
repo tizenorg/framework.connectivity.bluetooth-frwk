@@ -21,8 +21,7 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
+#include <gio/gio.h>
 #include <glib.h>
 #include <dlog.h>
 #include <string.h>
@@ -65,18 +64,17 @@ static void __bt_free_wait_data();
 static gboolean __bt_device_support_uuid(char *remote_address,
 				bt_audio_type_t type);
 
-static void __bt_hf_request_cb(DBusGProxy *proxy, DBusGProxyCall *call,
+static void __bt_hf_request_cb(GDBusProxy *proxy, GAsyncResult *res,
 				    gpointer user_data)
 {
 	GError *g_error = NULL;
-	GArray *out_param1 = NULL;
-	GArray *out_param2 = NULL;
+	GVariant *out_param1 = NULL;
+	GVariant *reply = NULL;
 	int result = BLUETOOTH_ERROR_NONE;
 	bt_function_data_t *func_data;
 	request_info_t *req_info;
 
-	dbus_g_proxy_end_call(proxy, call, &g_error, G_TYPE_INVALID);
-
+	reply = g_dbus_proxy_call_finish(proxy, res, &g_error);
 	g_object_unref(proxy);
 
 	func_data = user_data;
@@ -93,34 +91,29 @@ static void __bt_hf_request_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 		goto done;
 	}
 
-	if (g_error == NULL)
-		goto dbus_return;
+	if (reply == NULL) {
+		BT_ERR("HF Connect Dbus Call Error");
+		if (g_error) {
+			BT_ERR("Error: %s\n", g_error->message);
+			g_clear_error(&g_error);
+		}
+		result = BLUETOOTH_ERROR_INTERNAL;
+	} else {
+		g_variant_unref(reply);
+	}
 
-	BT_ERR("HFG request Dbus Call Error: %s\n", g_error->message);
-
-	result = BLUETOOTH_ERROR_INTERNAL;
-
-dbus_return:
 	if (req_info->context == NULL)
 		goto done;
 
-	out_param1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param2 = g_array_new(FALSE, FALSE, sizeof(gchar));
+	out_param1 = g_variant_new_from_data((const GVariantType *)"ay",
+		func_data->address, BT_ADDRESS_STR_LEN, TRUE, NULL, NULL);
 
-	g_array_append_vals(out_param1, func_data->address,
-				BT_ADDRESS_STR_LEN);
-	g_array_append_vals(out_param2, &result, sizeof(int));
-
-	dbus_g_method_return(req_info->context, out_param1, out_param2);
-
-	g_array_free(out_param1, TRUE);
-	g_array_free(out_param2, TRUE);
+	g_dbus_method_invocation_return_value(req_info->context,
+			g_variant_new("(iv)", result, out_param1));
 
 	_bt_delete_request_list(req_info->req_id);
-done:
-	if (g_error)
-		g_error_free(g_error);
 
+done:
 	if (func_data) {
 		g_free(func_data->address);
 		g_free(func_data);
@@ -153,21 +146,19 @@ void _bt_audio_check_pending_connect()
 	return;
 }
 
-static void __bt_audio_request_cb(DBusGProxy *proxy, DBusGProxyCall *call,
+static void __bt_audio_request_cb(GDBusProxy *proxy, GAsyncResult *res,
 				    gpointer user_data)
 {
 	GError *g_error = NULL;
-	GArray *out_param1 = NULL;
-	GArray *out_param2 = NULL;
+	GVariant *out_param1 = NULL;
+	GVariant *reply = NULL;
 	int result = BLUETOOTH_ERROR_NONE;
-
 	bt_audio_function_data_t *func_data;
-
 	request_info_t *req_info;
 
-	dbus_g_proxy_end_call(proxy, call, &g_error, G_TYPE_INVALID);
-
+	reply = g_dbus_proxy_call_finish(proxy, res, &g_error);
 	g_object_unref(proxy);
+	g_variant_unref(reply);
 
 	func_data = user_data;
 
@@ -247,109 +238,20 @@ dbus_return:
 		goto done;
 	}
 
-	out_param1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param2 = g_array_new(FALSE, FALSE, sizeof(gchar));
+	out_param1 = g_variant_new_from_data((const GVariantType *)"ay",
+		func_data->address, BT_ADDRESS_STR_LEN, TRUE, NULL, NULL);
 
-	g_array_append_vals(out_param1, func_data->address,
-			BT_ADDRESS_STR_LEN);
-	g_array_append_vals(out_param2, &result, sizeof(int));
-
-	dbus_g_method_return(req_info->context, out_param1, out_param2);
-
-	g_array_free(out_param1, TRUE);
-	g_array_free(out_param2, TRUE);
+	g_dbus_method_invocation_return_value(req_info->context,
+			g_variant_new("(iv)", result, out_param1));
 
 	_bt_delete_request_list(req_info->req_id);
 done:
-	if (g_error)
-		g_error_free(g_error);
+	g_clear_error(&g_error);
 
 	if (func_data) {
 		g_free(func_data->address);
 		g_free(func_data);
 	}
-}
-
-static char *__bt_get_audio_path(bluetooth_device_address_t *address)
-{
-
-	char *object_path = NULL;
-	char addr_str[BT_ADDRESS_STRING_SIZE + 1] = { 0 };
-	DBusGProxy *audio_proxy;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *g_conn;
-	GError *error = NULL;
-
-	retv_if(address == NULL, NULL);
-
-	g_conn = _bt_get_system_gconn();
-	retv_if(g_conn == NULL, NULL);
-
-	adapter_proxy = _bt_get_adapter_proxy();
-	retv_if(adapter_proxy == NULL, NULL);
-
-	_bt_convert_addr_type_to_string(addr_str, address->addr);
-
-	dbus_g_proxy_call(adapter_proxy, "FindDevice",
-			&error, G_TYPE_STRING, addr_str,
-			G_TYPE_INVALID, DBUS_TYPE_G_OBJECT_PATH,
-			&object_path, G_TYPE_INVALID);
-
-	if (error != NULL) {
-		BT_ERR("Failed to Find device: %s\n", error->message);
-		g_error_free(error);
-		return NULL;
-	}
-
-	retv_if(object_path == NULL, NULL);
-
-	audio_proxy = dbus_g_proxy_new_for_name(g_conn,
-			BT_BLUEZ_NAME,
-			object_path,
-			BT_HEADSET_INTERFACE);
-
-	retv_if(audio_proxy == NULL, NULL);
-
-	g_object_unref(audio_proxy);
-
-	return object_path;
-}
-
-static char *__bt_get_connected_audio_path(void)
-{
-	int i;
-	guint size;
-	char *audio_path = NULL;
-	GArray *device_list;
-	bluetooth_device_info_t info;
-
-	/* allocate the g_pointer_array */
-	device_list = g_array_new(FALSE, FALSE, sizeof(gchar));
-
-	if (_bt_get_bonded_devices(&device_list)
-			!= BLUETOOTH_ERROR_NONE) {
-		g_array_free(device_list, TRUE);
-		return NULL;
-	}
-
-	size = device_list->len;
-	size = (device_list->len) / sizeof(bluetooth_device_info_t);
-
-	for (i = 0; i < size; i++) {
-
-		info = g_array_index(device_list,
-				bluetooth_device_info_t, i);
-
-		if (info.connected != BLUETOOTH_CONNECTED_LINK_NONE) {
-			audio_path = __bt_get_audio_path(&info.device_address);
-			if (audio_path)
-				break;
-		}
-	}
-
-	g_array_free(device_list, TRUE);
-
-	return audio_path;
 }
 
 static void __bt_free_wait_data()
@@ -364,8 +266,7 @@ static void __bt_free_wait_data()
 static void __bt_remove_device_from_wait_list()
 {
 	/* Before deleting the request update the UI */
-	GArray *out_param_1 = NULL;
-	GArray *out_param_2 = NULL;
+	GVariant *out_param_1 = NULL;
 	int result = BLUETOOTH_ERROR_INTERNAL;
 	request_info_t *req_info;
 
@@ -375,15 +276,12 @@ static void __bt_remove_device_from_wait_list()
 		return;
 	}
 
-	out_param_1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param_2 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	g_array_append_vals(out_param_1, g_wait_data->address,
-			BT_ADDRESS_STR_LEN);
-	g_array_append_vals(out_param_2, &result, sizeof(int));
-	dbus_g_method_return(req_info->context,
-			out_param_1, out_param_2);
-	g_array_free(out_param_1, TRUE);
-	g_array_free(out_param_2, TRUE);
+	out_param_1 = g_variant_new_from_data((const GVariantType *)"ay",
+		g_wait_data->address, BT_ADDRESS_STR_LEN, TRUE, NULL, NULL);
+
+	g_dbus_method_invocation_return_value(req_info->context,
+			g_variant_new("(iv)", result, out_param_1));
+
 	_bt_delete_request_list(g_wait_data->req_id);
 }
 
@@ -720,8 +618,8 @@ int _bt_audio_connect(int request_id, int type,
 {
 	int result = BLUETOOTH_ERROR_NONE;
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *g_conn;
+	GDBusProxy *adapter_proxy;
+	GDBusConnection *g_conn;
 	int ret;
 	char *uuid;
 	int value = BLUETOOTH_ERROR_NONE;
@@ -818,8 +716,8 @@ int _bt_audio_disconnect(int request_id, int type,
 	int result = BLUETOOTH_ERROR_NONE;
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_audio_function_data_t *func_data;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *g_conn;
+	GDBusProxy *adapter_proxy;
+	GDBusConnection *g_conn;
 	GList *node;
 	int ret;
 	char *uuid;
@@ -835,12 +733,8 @@ int _bt_audio_disconnect(int request_id, int type,
 	_bt_convert_addr_type_to_string(address, device_address->addr);
 
 	func_data = g_malloc0(sizeof(bt_audio_function_data_t));
-	/* Fix : NULL_RETURNS */
-	if (func_data == NULL) {
-		BT_ERR("Memory allocation error");
-		result = BLUETOOTH_ERROR_MEMORY_ALLOCATION;
-		goto fail;
-	}
+	retv_if(func_data == NULL, BLUETOOTH_ERROR_INTERNAL);
+
 	func_data->address = g_strdup(address);
 	func_data->req_id = request_id;
 	func_data->pending = BT_PENDING_NONE;
@@ -940,12 +834,10 @@ int _bt_hf_connect(int request_id,
 	int result = BLUETOOTH_ERROR_NONE;
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_function_data_t *func_data;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *g_conn;
-
+	GDBusProxy *adapter_proxy;
+	GDBusConnection *g_conn;
 	int ret;
 	char *uuid;
-
 
 	BT_CHECK_PARAMETER(device_address, return);
 
@@ -1003,8 +895,8 @@ int _bt_hf_disconnect(int request_id,
 	int result = BLUETOOTH_ERROR_NONE;
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_function_data_t *func_data;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *g_conn;
+	GDBusProxy *adapter_proxy;
+	GDBusConnection *g_conn;
 
 	int ret;
 	char *uuid;
@@ -1057,126 +949,33 @@ fail:
 	return result;
 }
 
-int _bt_audio_get_speaker_gain(unsigned int *gain)
-{
-	char *device_path = NULL;
-	DBusGProxy *adapter_proxy;
-	DBusGProxy *profile_proxy;
-	DBusGConnection *g_conn;
-	GHashTable *hash = NULL;
-	GValue *value;
-
-	adapter_proxy = _bt_get_adapter_proxy();
-	retv_if(adapter_proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	g_conn = _bt_get_system_gconn();
-	retv_if(g_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	device_path = __bt_get_connected_audio_path();
-	retv_if(device_path == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
-
-	profile_proxy = dbus_g_proxy_new_for_name(g_conn, BT_BLUEZ_NAME,
-				      device_path, BT_HEADSET_INTERFACE);
-
-	g_free(device_path);
-
-	retv_if(profile_proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_g_proxy_call(profile_proxy, "GetProperties", NULL,
-			G_TYPE_INVALID,
-			dbus_g_type_get_map("GHashTable",
-			G_TYPE_STRING, G_TYPE_VALUE),
-			&hash, G_TYPE_INVALID);
-
-	g_object_unref(profile_proxy);
-
-	retv_if(hash == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	value = g_hash_table_lookup(hash, "SpeakerGain");
-	*gain = value ? g_value_get_uint(value) : 0;
-	g_hash_table_destroy(hash);
-	return BLUETOOTH_ERROR_NONE;
-}
-
-int _bt_audio_set_speaker_gain(unsigned int gain)
-{
-	char *device_path = NULL;
-	char *gain_str = "SpeakerGain";
-	char sig[2] = {DBUS_TYPE_UINT16, '\0'};
-	int ret = BLUETOOTH_ERROR_NONE;
-	DBusMessage *msg;
-	DBusMessageIter iter;
-	DBusMessageIter value;
-	DBusConnection *conn;
-
-	conn = _bt_get_system_conn();
-	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	device_path = __bt_get_connected_audio_path();
-	retv_if(device_path == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
-
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME,
-			device_path, BT_HEADSET_INTERFACE,
-			"SetProperty");
-
-	g_free(device_path);
-
-	retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_message_iter_init_append(msg, &iter);
-	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
-			&gain_str);
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT,
-			sig, &value);
-	dbus_message_iter_append_basic(&value, DBUS_TYPE_UINT16,
-			&gain);
-	dbus_message_iter_close_container(&iter, &value);
-
-	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_METHOD_CALL)
-		dbus_message_set_no_reply(msg, TRUE);
-
-	if (!dbus_connection_send(conn, msg, NULL)) {
-		BT_ERR("Dbus sending failed\n");
-		ret = BLUETOOTH_ERROR_INTERNAL;
-	}
-	dbus_message_unref(msg);
-
-	return ret;
-}
-
 int _bt_audio_set_content_protect(gboolean status)
 {
-	DBusConnection *conn;
-	DBusMessage *signal;
+	GDBusConnection *conn;
+	GError *error = NULL;
 
 	BT_DBG("+\n");
 
-	conn = _bt_get_system_conn();
+	conn = _bt_get_system_gconn();
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	BT_DBG("Content Protection status = [%d] \n", status);
+	BT_DBG("Content Protection status = [%d]", status);
 
-	/*Emit Content protection Status change signal with value*/
-	signal = dbus_message_new_signal(BT_CONTENT_PROTECTION_PATH,
-					BT_CONTENT_PROTECTION_INTERFACE,
-					"ProtectionRequired");
-	if (!signal)
-		goto err;
+	g_dbus_connection_emit_signal(conn,
+			NULL, BT_CONTENT_PROTECTION_PATH,
+			BT_CONTENT_PROTECTION_INTERFACE,
+			"ProtectionRequired",
+			g_variant_new("(b)", status),
+			&error);
 
-	if (!dbus_message_append_args(signal,
-				DBUS_TYPE_BOOLEAN, &status,
-				DBUS_TYPE_INVALID)) {
-		BT_ERR("Signal appending failed\n");
-		dbus_message_unref(signal);
-		goto err;
+	if (error) {
+		/* dBUS gives error cause */
+		ERR("Could not Emit Signal: errCode[%x], message[%s]",
+			error->code, error->message);
+		g_clear_error(&error);
+		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	dbus_connection_send(conn, signal, NULL);
-	dbus_message_unref(signal);
-
-	BT_DBG("-\n");
+	BT_DBG("Emit Signal done = [ProtectionRequired]");
 	return BLUETOOTH_ERROR_NONE;
-
-err:
-	return BLUETOOTH_ERROR_INTERNAL;
 }

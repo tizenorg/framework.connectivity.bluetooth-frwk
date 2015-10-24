@@ -33,6 +33,11 @@
 extern "C" {
 #endif
 
+#define BT_LE_SCAN_INTERVAL_MIN 2.5
+#define BT_LE_SCAN_INTERVAL_MAX 10240
+#define BT_LE_SCAN_WINDOW_MIN 2.5
+#define BT_LE_SCAN_WINDOW_MAX 10240
+
 typedef enum {
 	BT_LE_AD_TYPE_INCOMP_LIST_16_BIT_SERVICE_CLASS_UUIDS = 0x02,
 	BT_LE_AD_TYPE_COMP_LIST_16_BIT_SERVICE_CLASS_UUIDS = 0x03,
@@ -114,6 +119,24 @@ int _bt_add_white_list(bluetooth_device_address_t *device_address, bluetooth_dev
 int _bt_remove_white_list(bluetooth_device_address_t *device_address, bluetooth_device_address_type_t address_type);
 
 int _bt_clear_white_list(void);
+
+int _bt_le_read_maximum_data_length(bluetooth_le_read_maximum_data_length_t *max_le_datalength);
+
+int _bt_initialize_ipsp(void);
+
+int _bt_deinitialize_ipsp(void);
+
+void _bt_init_gatt_client_senders(void);
+
+int _bt_insert_gatt_client_sender(char *sender);
+
+int _bt_delete_gatt_client_sender(char *sender);
+
+void _bt_clear_gatt_client_senders(void);
+
+void _bt_send_char_value_changed_event(void *param);
+
+gboolean _bt_is_set_scan_parameter(void);
 
 #ifdef __cplusplus
 }

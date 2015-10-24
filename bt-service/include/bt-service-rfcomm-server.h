@@ -52,8 +52,8 @@ typedef struct {
 	char *remote_address;
 	GIOChannel *control_io;
 	GIOChannel *data_io;
-	DBusGProxy *serial_proxy;
-	DBusGProxy *manager_proxy;
+//	DBusGProxy *serial_proxy;
+//	DBusGProxy *manager_proxy;
 } bt_rfcomm_server_info_t;
 
 int _bt_rfcomm_create_socket(char *sender, char *uuid);

@@ -25,7 +25,6 @@
 #define __BT_SERVICE_OBEX_AGENT_H
 
 #include <glib-object.h>
-#include <dbus/dbus-glib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,83 +52,62 @@ GType bt_obex_agent_get_type(void);
 #define BT_OBEX_AGENT_CLASS(agent_class) (G_TYPE_CHECK_CLASS_CAST((agent_class), BT_OBEX_TYPE_AGENT, BtObexAgentClass))
 #define BT_OBEX_GET_AGENT_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), BT_OBEX_TYPE_AGENT, BtObexAgentClass))
 
-typedef gboolean(*bt_obex_authorize_cb)(DBusGMethodInvocation *context,
+typedef gboolean(*bt_obex_authorize_cb)(GDBusMethodInvocation *context,
 					   const char *path,
 					   gpointer data);
 
-typedef gboolean(*bt_obex_request_cb)(DBusGMethodInvocation *context,
-				DBusGProxy *transfer,
+typedef gboolean(*bt_obex_request_cb)(GDBusMethodInvocation *context,
+				GDBusProxy *transfer,
 				gpointer data);
 
-typedef gboolean(*bt_obex_progress_cb)(DBusGMethodInvocation *context,
-				DBusGProxy *transfer,
+typedef gboolean(*bt_obex_progress_cb)(GDBusMethodInvocation *context,
+				GDBusProxy *transfer,
 				guint64 transferred,
 				gpointer data);
 
-typedef gboolean(*bt_obex_error_cb)(DBusGMethodInvocation *context,
-				DBusGProxy *transfer,
+typedef gboolean(*bt_obex_error_cb)(GDBusMethodInvocation *context,
+				GDBusProxy *transfer,
 				const char *message,
 				gpointer data);
 
-typedef gboolean(*bt_obex_complete_cb)(DBusGMethodInvocation *context,
-				DBusGProxy *transfer,
+typedef gboolean(*bt_obex_complete_cb)(GDBusMethodInvocation *context,
+				GDBusProxy *transfer,
 				gpointer data);
 
-typedef gboolean(*bt_obex_release_cb)(DBusGMethodInvocation *context,
+typedef gboolean(*bt_obex_release_cb)(GDBusMethodInvocation *context,
 				gpointer data);
 
 G_END_DECLS
 
-void _bt_obex_set_authorize_cb(BtObexAgent *agent,
+void _bt_obex_set_authorize_cb(char *object_path,
 			 bt_obex_authorize_cb func,
 			 gpointer data);
 
-void _bt_obex_set_request_cb(BtObexAgent *agent,
+void _bt_obex_set_request_cb(char *object_path,
 		       bt_obex_request_cb func,
 		       gpointer data);
 
-void _bt_obex_set_progress_cb(BtObexAgent *agent,
+void _bt_obex_set_progress_cb(char *object_path,
 			bt_obex_progress_cb func,
 			gpointer data);
 
-void _bt_obex_set_error_cb(BtObexAgent *agent,
+void _bt_obex_set_error_cb(char *object_path,
 			bt_obex_error_cb func,
 			gpointer data);
 
-void _bt_obex_set_complete_cb(BtObexAgent *agent,
+void _bt_obex_set_complete_cb(char *object_path,
 			bt_obex_complete_cb func,
 			gpointer data);
 
-void _bt_obex_set_release_cb(BtObexAgent *agent,
+void _bt_obex_set_release_cb(char *object_path,
 		       bt_obex_release_cb func,
 		       gpointer data);
 
-BtObexAgent *_bt_obex_agent_new(void);
+void _bt_obex_agent_new(char *path);
 
-gboolean _bt_obex_setup(BtObexAgent *agent, const char *path);
+void _bt_obex_agent_destroy(char *path);
 
-gboolean bt_obex_agent_request(BtObexAgent *agent, const char *path,
-				   DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_authorize_push(BtObexAgent *agent, const char *path,
-			     DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_authorize(BtObexAgent *agent, const char *path,
-			const char *bdaddress, const char *name,
-			const char *type, gint length, gint time,
-			     DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_progress(BtObexAgent *agent, const char *path,
-		    guint64 transferred, DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_complete(BtObexAgent *agent, const char *path,
-				    DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_release(BtObexAgent *agent, DBusGMethodInvocation *context);
-
-gboolean bt_obex_agent_error(BtObexAgent *agent, const char *path,
-			 const char *message, DBusGMethodInvocation *context);
-
+gboolean _bt_obex_setup(const char *path);
 
 #ifdef __cplusplus
 }

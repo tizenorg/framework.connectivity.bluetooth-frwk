@@ -178,10 +178,9 @@ static void __bt_telephony_method(GDBusConnection *connection,
 
 	if (g_strcmp0(method_name, "SendDtmf") == 0) {
 		gchar *dtmf;
-		gsize len;
 		telephony_event_dtmf_t call_data = { 0, };
 
-		dtmf = (gchar *)g_variant_get_string(parameters, &len);
+		g_variant_get(parameters, "(&s)", &dtmf);
 
 		if (dtmf == NULL) {
 			BT_ERR("Number dial failed");
@@ -192,9 +191,10 @@ static void __bt_telephony_method(GDBusConnection *connection,
 			DBG_SECURE("Dtmf = %s", dtmf);
 
 			call_data.dtmf = g_strdup(dtmf);
-			__bt_telephony_event_cb(BLUETOOTH_EVENT_TELEPHONY_SEND_DTMF,
-					BLUETOOTH_TELEPHONY_ERROR_NONE,
-					(void *)&call_data);
+			__bt_telephony_event_cb(
+				BLUETOOTH_EVENT_TELEPHONY_SEND_DTMF,
+				BLUETOOTH_TELEPHONY_ERROR_NONE,
+				(void *)&call_data);
 
 			g_free(call_data.dtmf);
 
@@ -202,9 +202,8 @@ static void __bt_telephony_method(GDBusConnection *connection,
 		}
 	} else if (g_strcmp0(method_name, "VendorCmd") == 0) {
 		gchar *at_cmd;
-		gsize len;
 
-		at_cmd = (gchar *)g_variant_get_string(parameters, &len);
+		g_variant_get(parameters, "(&s)", &at_cmd);
 		BT_INFO("Vendor %s", at_cmd);
 		if (at_cmd == NULL) {
 			BT_ERR("Vendor command is NULL\n");
@@ -214,8 +213,10 @@ static void __bt_telephony_method(GDBusConnection *connection,
 		} else {
 			DBG_SECURE("Vendor AT cmd = %s", at_cmd);
 
-			__bt_telephony_event_cb(BLUETOOTH_EVENT_TELEPHONY_VENDOR_AT_CMD,
-				BLUETOOTH_TELEPHONY_ERROR_NONE, at_cmd);
+			__bt_telephony_event_cb(
+				BLUETOOTH_EVENT_TELEPHONY_VENDOR_AT_CMD,
+				BLUETOOTH_TELEPHONY_ERROR_NONE,
+				at_cmd);
 
 			g_dbus_method_invocation_return_value(invocation, NULL);
 		}
@@ -277,6 +278,7 @@ static int __bt_telephony_check_privilege(void)
 	if (!reply) {
 		BT_ERR("Error returned in method call");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -364,18 +366,17 @@ static int __bluetooth_telephony_send_call_status(
 
 	param = g_variant_new("(ssii)", path, phone_number,
 			call_status, call_id);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"ChangeCallStatus", &err, param);
 
 	g_free(path);
 	g_free(phone_number);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -503,33 +504,27 @@ static void __bluetooth_telephony_event_filter(GDBusConnection *connection,
 	BT_DBG("+");
 
 	if (strcasecmp(interface_name, HFP_AGENT_SERVICE) == 0) {
-		if (strcasecmp(signal_name, HFP_NREC_STATUS_CHANGE) == 0) {
+		if (strcasecmp(signal_name, HFP_NREC_STATUS_CHANGE) == 0)
 			__bluetooth_handle_nrec_status_change(parameters);
-		} else if (strcasecmp(signal_name, HFP_ANSWER_CALL) == 0) {
+		else if (strcasecmp(signal_name, HFP_ANSWER_CALL) == 0)
 			__bluetooth_telephony_answer_call(parameters);
-		} else if (strcasecmp(signal_name, HFP_REJECT_CALL) == 0) {
+		else if (strcasecmp(signal_name, HFP_REJECT_CALL) == 0)
 			__bluetooth_telephony_reject_call(parameters);
-		} else if (strcasecmp(signal_name, HFP_RELEASE_CALL) == 0) {
+		else if (strcasecmp(signal_name, HFP_RELEASE_CALL) == 0)
 			__bluetooth_telephony_release_call(parameters);
-		} else if (strcasecmp(signal_name, HFP_THREEWAY_CALL) == 0) {
+		else if (strcasecmp(signal_name, HFP_THREEWAY_CALL) == 0)
 			__bluetooth_telephony_threeway_call(parameters);
-		}
 	} else if (strcasecmp(interface_name, BLUEZ_HEADSET_INTERFACE) == 0) {
 		if (strcasecmp(signal_name, "PropertyChanged") == 0) {
 			GVariant *values;
 			gchar *property;
 
-			/*Parse (sv)*/
-			BT_DBG("Type of Parameters= %s", g_variant_get_type_string(parameters));
-
-			g_variant_get(parameters, "(sv)", &property, &values);
+			g_variant_get(parameters, "(&sv)", &property, &values);
 			BT_DBG("Property: %s", property);
 
 			if (strcasecmp(property, "State") == 0) {
 				gchar *state;
-				gsize len;
-				BT_DBG("Type of values %s", g_variant_get_type_string(values));
-				state = (gchar *)g_variant_get_string(values, &len);
+				state = (gchar *)g_variant_get_string(values, NULL);
 
 				if (NULL == state) {
 					BT_ERR("State is null");
@@ -553,7 +548,6 @@ static void __bluetooth_telephony_event_filter(GDBusConnection *connection,
 			} else if (strcasecmp(property, "Connected") == 0) {
 				gboolean connected = FALSE;
 				char *dev_addr = NULL;
-				BT_DBG("Type of values %s", g_variant_get_type_string(values));
 				connected = g_variant_get_boolean(values);
 				BT_INFO("connected %d", connected);
 				if (connected) {
@@ -606,10 +600,8 @@ static void __bluetooth_telephony_event_filter(GDBusConnection *connection,
 				}
 			} else if (strcasecmp(property, "SpeakerGain") == 0) {
 				unsigned int spkr_gain;
-				guint16 gain;
+				guint16 gain = g_variant_get_uint16(values);
 
-				BT_DBG("Type of values %s", g_variant_get_type_string(values));
-				gain = g_variant_get_uint16(values);
 				spkr_gain = (unsigned int)gain;
 				BT_DBG("spk_gain[%d]", spkr_gain);
 
@@ -619,10 +611,8 @@ static void __bluetooth_telephony_event_filter(GDBusConnection *connection,
 						(void *)&spkr_gain);
 			} else if (strcasecmp(property, "MicrophoneGain") == 0) {
 				unsigned int mic_gain;
-				guint16 gain;
+				guint16 gain = g_variant_get_uint16(values);
 
-				BT_DBG("Type of values %s", g_variant_get_type_string(values));
-				gain = g_variant_get_uint16(values);
 				mic_gain = (unsigned int)gain;
 				BT_DBG("mic_gain[%d]", mic_gain);
 
@@ -631,11 +621,9 @@ static void __bluetooth_telephony_event_filter(GDBusConnection *connection,
 						BLUETOOTH_TELEPHONY_ERROR_NONE,
 						(void *)&mic_gain);
 			} else if (strcasecmp(property, "Playing") == 0) {
-				gboolean audio_sink_playing = FALSE;
+				gboolean audio_sink_playing;
 
-				BT_DBG("Type of values %s", g_variant_get_type_string(values));
 				audio_sink_playing = g_variant_get_boolean(values);
-
 				if (audio_sink_playing) {
 					telephony_info.headset_state = BLUETOOTH_STATE_PLAYING;
 					__bt_telephony_event_cb(
@@ -762,18 +750,17 @@ static int __bluetooth_telephony_register(void)
 
 	param = g_variant_new("(ss)", path, src_addr);
 	BT_DBG("Path[%s] Src_Address[%s]", path, src_addr);
-	BT_DBG("Variant Type %s", g_variant_get_type_string(param));
 
 	reply =  __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"RegisterApplication", &err, param);
 
 	g_free(path);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(err);
@@ -799,17 +786,16 @@ static  int __bluetooth_telephony_unregister(void)
 	FN_START;
 
 	param = g_variant_new("(s)", path);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"UnregisterApplication", &err, param);
 
 	g_free(path);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -843,13 +829,12 @@ static void __bluetooth_telephony_init_headset_state(void)
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
-			__bt_telephony_get_error(err->message);
+			BT_ERR("Error message = %s", err->message);
 			g_error_free(err);
 		}
 		return;
 	}
 
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
 	g_variant_get(reply, "(b)", &status);
 	g_variant_unref(reply);
 
@@ -970,6 +955,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 		BT_ERR("Unable to allocate new proxy \n");
 		ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 		if (error) {
+			g_dbus_error_strip_remote_error(error);
 			ret = __bt_telephony_get_error(error->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(error);
@@ -986,6 +972,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 		BT_ERR("Can't get managed objects");
 		ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 		if (error) {
+			g_dbus_error_strip_remote_error(error);
 			ret = __bt_telephony_get_error(error->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(error);
@@ -1010,7 +997,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 			gchar **uuids = NULL;
 			GVariant *getall_param = NULL;
 
-			g_variant_get(var_path, "{o*}", &object_path,
+			g_variant_get(var_path, "{&o*}", &object_path,
 					&path_values);
 			g_variant_unref(path_values); /* path_values unused*/
 
@@ -1022,6 +1009,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 				BT_ERR("Unable to allocate new proxy \n");
 				ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 				if (error) {
+					g_dbus_error_strip_remote_error(error);
 					ret = __bt_telephony_get_error(error->message);
 					BT_ERR("Error here %d\n", ret);
 					g_error_free(error);
@@ -1035,12 +1023,12 @@ static int __bluetooth_telephony_get_connected_device(void)
 					"GetAll", getall_param,
 					G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
 			g_object_unref(proxy);
-			g_variant_unref(getall_param);
 
 			if (!getall) {
 				BT_ERR("Can't get managed objects");
 				ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 				if (error) {
+					g_dbus_error_strip_remote_error(error);
 					ret = __bt_telephony_get_error(error->message);
 					BT_ERR("Error here %d\n", ret);
 					g_error_free(error);
@@ -1050,7 +1038,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 
 			g_variant_iter_init(&property_iter, getall);
 
-			while (g_variant_iter_loop(&property_iter, "{sv}", &key, &value)) {
+			while (g_variant_iter_loop(&property_iter, "{&sv}", &key, &value)) {
 				if (!g_strcmp0(key, "Class")) {
 					device_class = g_variant_get_uint32(value);
 					BT_DBG("Device Class: %d", device_class);
@@ -1059,7 +1047,9 @@ static int __bluetooth_telephony_get_connected_device(void)
 					uuids = (gchar **)g_variant_get_strv(value, &len);
 					BT_DBG_UUID(uuids, len, i);
 				} else if (!g_strcmp0(key, "Address")) {
-					address = (gchar *)g_variant_get_string(value, &len);
+					address = (gchar *)g_variant_get_string(
+									value,
+									NULL);
 					BT_DBG("Device Class: %s", address);
 				}
 				g_variant_unref(value);
@@ -1074,9 +1064,8 @@ static int __bluetooth_telephony_get_connected_device(void)
 				}
 				BT_DBG("UUID checking completed. HF device");
 			} else {
-				if (!__bluetooth_telephony_is_headset(device_class)) {
+				if (!__bluetooth_telephony_is_headset(device_class))
 					continue;
-				}
 			}
 
 			/* this is headset; Check for Connection */
@@ -1088,6 +1077,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 				BT_ERR("Unable to allocate new headset_agent_proxy");
 				ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 				if (error) {
+					g_dbus_error_strip_remote_error(error);
 					ret = __bt_telephony_get_error(error->message);
 					BT_ERR("Error here %d\n", ret);
 					g_error_free(error);
@@ -1104,6 +1094,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 				BT_ERR("Can't get managed objects");
 				ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 				if (error) {
+					g_dbus_error_strip_remote_error(error);
 					ret = __bt_telephony_get_error(error->message);
 					BT_ERR("Error here %d\n", ret);
 					g_error_free(error);
@@ -1126,6 +1117,7 @@ static int __bluetooth_telephony_get_connected_device(void)
 						BT_ERR("Can't get managed objects");
 						ret = BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 						if (error) {
+							g_dbus_error_strip_remote_error(error);
 							ret = __bt_telephony_get_error(error->message);
 							BT_ERR("Error here %d\n", ret);
 							g_error_free(error);
@@ -1147,17 +1139,9 @@ static int __bluetooth_telephony_get_connected_device(void)
 			}
 
 			g_object_unref(headset_agent_proxy);
-			if (var_path) {
-				g_variant_unref(var_path);
-				var_path = NULL;
-			}
+			g_variant_unref(var_path);
 		}
-
-		if (param) {
-			g_variant_unref(param);
-			param = NULL;
-		}
-
+		g_variant_unref(param);
 	}
 
 done:
@@ -1193,6 +1177,7 @@ static GDBusProxy *__bluetooth_telephony_get_connected_device_proxy(void)
 	if (proxy == NULL) {
 		BT_ERR("Unable to allocate new proxy");
 		if (error) {
+			g_dbus_error_strip_remote_error(error);
 			ret = __bt_telephony_get_error(error->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(error);
@@ -1210,7 +1195,7 @@ int __bt_telephony_subscribe_adapter_signal(GDBusConnection *conn,
 	if (conn == NULL)
 		return -1;
 
-	static int subscribe_adapter_id = -1 ;
+	static int subscribe_adapter_id = -1;
 	if (subscribe == TRUE) {
 		if (subscribe_adapter_id == -1) {
 			subscribe_adapter_id = g_dbus_connection_signal_subscribe(conn,
@@ -1236,12 +1221,12 @@ int __bt_telephony_event_subscribe_signal(GDBusConnection *conn,
 	if (conn == NULL)
 		return -1;
 
-	static int subscribe_event1_id = -1 ;
-	static int subscribe_event2_id = -1 ;
-	static int subscribe_event3_id = -1 ;
-	static int subscribe_event4_id = -1 ;
-	static int subscribe_event5_id = -1 ;
-	static int subscribe_event6_id = -1 ;
+	static int subscribe_event1_id = -1;
+	static int subscribe_event2_id = -1;
+	static int subscribe_event3_id = -1;
+	static int subscribe_event4_id = -1;
+	static int subscribe_event5_id = -1;
+	static int subscribe_event6_id = -1;
 	if (subscribe == TRUE) {
 		if (subscribe_event1_id == -1) {
 			subscribe_event1_id = g_dbus_connection_signal_subscribe(conn,
@@ -1371,6 +1356,7 @@ BT_EXPORT_API int bluetooth_telephony_init(bt_telephony_func_ptr cb,
 		telephony_dbus_info.conn = NULL;
 		is_initialized = FALSE;
 		if (error) {
+			g_dbus_error_strip_remote_error(error);
 			ret = __bt_telephony_get_error(error->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(error);
@@ -1504,12 +1490,11 @@ BT_EXPORT_API gboolean bluetooth_telephony_is_sco_connected(void)
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
-			__bt_telephony_get_error(err->message);
+			BT_ERR("Error message = %s", err->message);
 			g_error_free(err);
 		}
 		return FALSE;
 	}
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
 	g_variant_get(reply, "(b)", &status);
 	g_variant_unref(reply);
 
@@ -1553,13 +1538,10 @@ BT_EXPORT_API int bluetooth_telephony_is_nrec_enabled(gboolean *status)
 		return BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 	}
 
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
-
 	g_variant_iter_init(&iter, reply);
 	while ((param_inner = g_variant_iter_next_value(&iter))) {
 		GVariant *value;
 
-		BT_INFO("Variant Type: %s", g_variant_get_type_string(param_inner));
 		value = g_variant_lookup_value(param_inner,
 					"nrec", G_VARIANT_TYPE_BOOLEAN);
 		if (value) {
@@ -1609,7 +1591,6 @@ BT_EXPORT_API int bluetooth_telephony_is_wbs_mode(gboolean *status)
 		}
 		return BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 	}
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
 
 	g_variant_iter_init(&iter, reply);
 	while ((param_inner = g_variant_iter_next_value(&iter))) {
@@ -1617,7 +1598,6 @@ BT_EXPORT_API int bluetooth_telephony_is_wbs_mode(gboolean *status)
 
 		value = g_variant_lookup_value(param_inner,
 					"codec", G_VARIANT_TYPE_UINT32);
-
 		if (value) {
 			BT_DBG("Property CODEC Found");
 			codec = g_variant_get_uint32(value);
@@ -1630,8 +1610,6 @@ BT_EXPORT_API int bluetooth_telephony_is_wbs_mode(gboolean *status)
 			g_variant_unref(param_inner);
 			break;
 		}
-
-
 		g_variant_unref(param_inner);
 	}
 
@@ -1666,7 +1644,6 @@ BT_EXPORT_API int bluetooth_telephony_send_vendor_cmd(const char *cmd)
 			"SendVendorAtCmd", parameters,
 				G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
 
-	g_variant_unref(parameters);
 	g_variant_unref(reply);
 
 	FN_END;
@@ -1687,15 +1664,14 @@ BT_EXPORT_API int bluetooth_telephony_start_voice_recognition(void)
 	BT_TELEPHONY_CHECK_ENABLED();
 
 	param = g_variant_new("(b)", &state);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"SetVoiceDial", &err, param);
 
-	g_variant_unref(param);
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -1722,15 +1698,14 @@ BT_EXPORT_API int bluetooth_telephony_stop_voice_recognition(void)
 	BT_TELEPHONY_CHECK_ENABLED();
 
 	param = g_variant_new("(b)", &state);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"SetVoiceDial", &err, param);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -1798,8 +1773,9 @@ BT_EXPORT_API int bluetooth_telephony_audio_open(void)
 			HFP_AGENT_SERVICE, HFP_AGENT_PATH,
 			HFP_AGENT_INTERFACE, NULL, &err);
 	if (proxy == NULL) {
-		BT_ERR("Unable to allocate new proxy \n");
+		BT_ERR("Unable to allocate new proxy");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(err);
@@ -1870,6 +1846,7 @@ BT_EXPORT_API int bluetooth_telephony_audio_close(void)
 	if (proxy == NULL) {
 		BT_ERR("Unable to allocate new proxy");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			BT_ERR("Error here %d\n", ret);
 			g_error_free(err);
@@ -2127,15 +2104,14 @@ BT_EXPORT_API int bluetooth_telephony_indicate_outgoing_call(
 		return BLUETOOTH_TELEPHONY_ERROR_INVALID_PARAM;
 
 	param = g_variant_new("(ssi)", path, ph_number, call_id);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"OutgoingCall", &err, param);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -2180,15 +2156,14 @@ BT_EXPORT_API int bluetooth_telephony_indicate_incoming_call(
 		return BLUETOOTH_TELEPHONY_ERROR_INVALID_PARAM;
 
 	param = g_variant_new("(ssi)", path, ph_number, call_id);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"IncomingCall", &err, param);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -2219,15 +2194,14 @@ BT_EXPORT_API int bluetooth_telephony_set_speaker_gain(
 	BT_DBG("set speaker_gain= [%d]", speaker_gain);
 
 	param = g_variant_new("(q)", speaker_gain);
-	BT_DBG("Type of param: %s", g_variant_get_type_string(param));
 	reply = __bluetooth_telephony_dbus_method_send(
 			HFP_AGENT_PATH, HFP_AGENT_INTERFACE,
 			"SetSpeakerGain", &err, param);
-	g_variant_unref(param);
 
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
@@ -2260,13 +2234,13 @@ BT_EXPORT_API int bluetooth_telephony_get_headset_volume(
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
 		}
 		return BLUETOOTH_TELEPHONY_ERROR_INTERNAL;
 	}
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
 	g_variant_get(reply, "(q)", &gain);
 	*speaker_gain = gain;
 	BT_DBG("Get speaker_gain= [%d]", *speaker_gain);
@@ -2293,13 +2267,13 @@ BT_EXPORT_API int bluetooth_telephony_is_connected(gboolean *ag_connected)
 	if (!reply) {
 		BT_ERR("Error returned in method call\n");
 		if (err) {
+			g_dbus_error_strip_remote_error(err);
 			ret = __bt_telephony_get_error(err->message);
 			g_error_free(err);
 			return ret;
 		}
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
-	BT_INFO("Variant Type: %s", g_variant_get_type_string(reply));
 	g_variant_get(reply, "(b)", &ag_connected_from_bt_agent);
 	*ag_connected = ag_connected_from_bt_agent;
 
@@ -2353,20 +2327,16 @@ static int __bt_telephony_get_src_addr(GVariant *value)
 	GVariant *param = NULL;
 	FN_START;
 
-	BT_DBG("Type: %s", g_variant_get_type_string(value));
 	/* signature a{sa{sv}} */
 	g_variant_iter_init(&iter, value);
-	while ((param = g_variant_iter_next_value (&iter))) {
+	while ((param = g_variant_iter_next_value(&iter))) {
 		char *interface_name;
 		GVariant *interface_var = NULL;
 		GVariant *param_inner = NULL;
 
-		BT_DBG("Type: %s", g_variant_get_type_string(param));
-
-		g_variant_get(param, "{s*}", &interface_name, &interface_var);
+		g_variant_get(param, "{&s*}", &interface_name, &interface_var);
 		g_variant_unref(param);
 
-		BT_DBG("Type: %s", g_variant_get_type_string(interface_var));
 		BT_DBG("interface_name: %s", interface_name);
 		/* format of interface_var: a{sv}*/
 		if (strcasecmp(interface_name, BLUEZ_ADAPTER_INTERFACE) == 0) {
@@ -2377,21 +2347,17 @@ static int __bt_telephony_get_src_addr(GVariant *value)
 				char *property_name;
 				GVariant *property_var;
 
-				BT_DBG("Type: %s", g_variant_get_type_string(param_inner));
-
-				g_variant_get(param_inner, "{sv}",
+				g_variant_get(param_inner, "{&sv}",
 						&property_name,
 						&property_var);
 				g_variant_unref(param_inner);
 
-				BT_DBG("Type: %s", g_variant_get_type_string(property_var));
-
 				if (strcasecmp(property_name, "Address") == 0) {
-					gsize len;
 					const gchar *bd_addr;
 
-					bd_addr = g_variant_get_string(property_var,
-							&len);
+					bd_addr = g_variant_get_string(
+								property_var,
+								NULL);
 					src_addr = g_strdup(bd_addr);
 					BT_DBG("Address: %s", src_addr);
 

@@ -26,15 +26,9 @@
 
 #include <stdint.h>
 #include <glib.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
-
 #include <unistd.h>
 #include <dlog.h>
-
 #include <stdio.h>
-
-#include <dbus/dbus-glib.h>
 
 #undef LOG_TAG
 #define LOG_TAG	"BLUETOOTH_FRWK_SERVICE"

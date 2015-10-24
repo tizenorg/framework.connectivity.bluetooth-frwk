@@ -149,7 +149,7 @@ extern "C" {
 	do { \
 		if (arg == NULL) \
 		{ \
-			BT_ERR("INVALID PARAMETER"); \
+			BT_ERR("%s is NULL", #arg); \
 			func BLUETOOTH_ERROR_INVALID_PARAM; \
 		} \
 	} while (0)
@@ -337,13 +337,11 @@ DBusGProxy *_bt_get_adapter_proxy(DBusGConnection *conn);
 
 void _bt_device_path_to_address(const char *device_path, char *device_address);
 
-DBusGConnection *__bt_init_system_gconn(void);
+GDBusConnection *g_bus_get_private_conn(void);
 
-DBusGConnection *_bt_get_system_gconn(void);
+DBusConnection *__bt_init_system_conn(void);
 
 DBusConnection *_bt_get_system_conn(void);
-
-GDBusConnection *_bt_init_system_gdbus_conn(void);
 
 char *_bt_get_cookie(void);
 

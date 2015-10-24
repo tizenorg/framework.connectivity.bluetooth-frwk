@@ -26,7 +26,7 @@
 #define _BT_SERVICE_UTIL_H_
 
 #include <sys/types.h>
-#include <dbus/dbus-glib.h>
+#include <gio/gio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +38,7 @@ typedef struct {
 	int req_id;
 	int service_function;
 	char name[BT_NODE_NAME_LEN];
-	DBusGMethodInvocation *context;
+	GDBusMethodInvocation *context;
 } request_info_t;
 
 
@@ -52,7 +52,7 @@ void _bt_delete_request_id(int request_id);
 void _bt_init_request_list(void);
 
 int _bt_insert_request_list(int req_id, int service_function,
-			char *name, DBusGMethodInvocation *context);
+			char *name, GDBusMethodInvocation *context);
 
 int _bt_delete_request_list(int req_id);
 

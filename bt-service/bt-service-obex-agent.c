@@ -20,12 +20,11 @@
  * limitations under the License.
  *
  */
-#include <dbus/dbus-glib-lowlevel.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
+
 #include <glib.h>
 #include <dlog.h>
 #include <string.h>
+#include <gio/gio.h>
 
 #include "bluetooth-api.h"
 #include "bt-service-common.h"
@@ -33,13 +32,16 @@
 #include "bt-service-util.h"
 #include "bt-service-obex-agent.h"
 #include "marshal.h"
-#include "bt-obex-agent-method.h"
 
-static DBusGConnection *obex_conn = NULL;
+static GDBusConnection *conn = NULL;
+static GSList *obex_agent_list = NULL;
 
 typedef struct {
 	gchar *name;
 	gchar *path;
+
+	int openobex_id;
+	int obex_agent_id;
 
 	/* callback data */
 	gpointer authorize_data;
@@ -58,376 +60,441 @@ typedef struct {
 	bt_obex_error_cb error_cb;
 } bt_obex_agent_info;
 
-#define BT_OBEX_AGENT_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), \
-					BT_OBEX_TYPE_AGENT, bt_obex_agent_info))
+static void __new_connection_method(GDBusConnection *connection,
+					    const gchar *sender,
+					    const gchar *object_path,
+					    const gchar *interface_name,
+					    const gchar *method_name,
+					    GVariant *parameters,
+					    GDBusMethodInvocation *invocation,
+					    gpointer user_data);
+static const GDBusInterfaceVTable method_table = {
+	__new_connection_method,
+	NULL,
+	NULL,
+};
 
-G_DEFINE_TYPE(BtObexAgent, bt_obex_agent, G_TYPE_OBJECT)
+static const gchar obex_service_agent_xml1[] =
+"<node name='/'>"
+"  <interface name='org.openobex.Agent'>"
+"    <method name='Request'>"
+"      <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"      <arg type='o' name='transfer'/>"
+"     <arg type='s' name='name' direction='out'/>"
+"    </method>"
+"    <method name='Progress'>"
+"      <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"      <arg type='o' name='transfer'/>"
+"      <arg type='t' name='transferred'/>"
+"    </method>"
+"    <method name='Complete'>"
+"      <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"      <arg type='o' name='transfer'/>"
+ "   </method>"
+"    <method name='Release'>"
+"      <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"    </method>"
+"    <method name='Error'>"
+"      <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"      <arg type='o' name='transfer'/>"
+"      <arg type='s' name='message'/>"
+"    </method>"
+"    <method name='Authorize'>"
+"	<annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"		<arg type='o' name='objpath'/>"
+"		<arg type='s' name='bdaddress'/>"
+"		<arg type='s' name='name'/>"
+"		<arg type='s' name='type'/>"
+"		<arg type='i' name='length'/>"
+"		<arg type='i' name='time'/>"
+"		<arg type='s' name='filepath' direction='out'/>"
+"	</method>"
+"  </interface>"
+"</node>";
 
+static const gchar obex_service_agent_xml2[] =
+"<node name='/'>"
+"  <interface name='org.bluez.obex.Agent1'>"
+"    <method name='AuthorizePush'>"
+"    <annotation name='org.freedesktop.DBus.GLib.Async' value=''/>"
+"        <arg type='o' name='objpath'/>"
+"        <arg type='s' name='filepath' direction='out'/>"
+"    </method>"
+"  </interface>"
+"</node>";
 
-gboolean bt_obex_agent_authorize_push(BtObexAgent *agent, const char *path,
-			     DBusGMethodInvocation *context)
+static bt_obex_agent_info *__find_obex_agent_info(char *path)
 {
-	bt_obex_agent_info *info;
-	gboolean result;
+	GSList *l;
 
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	for (l = obex_agent_list; l != NULL; l = l->next) {
+		bt_obex_agent_info *info = l->data;
 
-	if (info == NULL)
-		goto fail;
+		if (g_strcmp0(info->path, path) == 0)
+			return info;
+	}
 
-	if (info->authorize_cb == NULL)
-		goto fail;
+	return NULL;
+}
 
-	result = info->authorize_cb(context, path,
+
+static void __new_connection_method(GDBusConnection *connection,
+					    const gchar *sender,
+					    const gchar *object_path,
+					    const gchar *interface_name,
+					    const gchar *method_name,
+					    GVariant *parameters,
+					    GDBusMethodInvocation *invocation,
+					    gpointer user_data)
+{
+	BT_DBG("method_name %s", method_name);
+	if (g_strcmp0(method_name, "AuthorizePush") == 0) {
+		bt_obex_agent_info *info;
+		char *path = NULL;
+		info = __find_obex_agent_info((char *)object_path);
+
+		if (info == NULL)
+			goto fail;
+
+		if (info->authorize_cb == NULL)
+			goto fail;
+
+		g_variant_get(parameters, "(&o)", &path);
+
+		info->authorize_cb(invocation, path,
 				info->authorize_data);
 
-	return result;
-fail:
-	dbus_g_method_return(context, "");
-	return FALSE;
-}
+		return;
+	} else if (g_strcmp0(method_name, "Authorize") == 0) {
+		g_dbus_method_invocation_return_value(invocation, NULL);
+	} else if (g_strcmp0(method_name, "Request") == 0) {
+		char *sender;
+		bt_obex_agent_info *info;
+		GDBusProxy *proxy;
+		char *path = NULL;
+		char *name = NULL;
+		GError *err = NULL;
 
-gboolean bt_obex_agent_authorize(BtObexAgent *agent, const char *path,
-			const char *bdaddress, const char *name,
-			const char *type, gint length, gint time,
-			     DBusGMethodInvocation *context)
-{
-	bt_obex_agent_info *info;
+		info = __find_obex_agent_info((char *)object_path);
 
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+		if (info == NULL)
+			goto fail;
 
-	if (info == NULL)
-		goto fail;
+		if (conn == NULL)
+			goto fail;
 
-	if (info->authorize_cb == NULL)
-		goto fail;
+		sender = (char *)g_dbus_method_invocation_get_sender(invocation);
 
-	return TRUE;
-fail:
-	dbus_g_method_return(context, "");
-	return FALSE;
-}
+		if (info->name == NULL) {
+			info->name = sender;
+		} else {
+			if (g_strcmp0(sender, info->name) != 0) {
+				goto fail;
+			}
+		}
 
-gboolean bt_obex_agent_request(BtObexAgent *agent, const char *path,
-				   DBusGMethodInvocation *context)
-{
-	char *sender;
-	bt_obex_agent_info *info;
-	DBusGProxy *proxy;
-	gboolean result;
+		if (info->request_cb == NULL)
+			goto fail;
 
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+		g_variant_get(parameters, "(&o&s)", &path, &name);
+		proxy = g_dbus_proxy_new_sync(conn, G_DBUS_CALL_FLAGS_NONE,
+					NULL,
+					BT_OBEX_SERVICE_NAME,
+					path,
+					BT_OBEX_TRANSFER_INTERFACE,
+					NULL, &err);
 
-	if (info == NULL)
-		goto fail;
-
-	if (obex_conn == NULL)
-		goto fail;
-
-	sender = dbus_g_method_get_sender(context);
-
-	BT_DBG("sender %s", sender);
-
-	if (info->name == NULL) {
-		info->name = sender;
-	} else {
-		if (g_strcmp0(sender, info->name) != 0) {
-			g_free(sender);
+		if (err) {
+			BT_ERR("Dbus Err: %s", err->message);
+			g_clear_error(&err);
 			goto fail;
 		}
-		g_free(sender);
-	}
 
-	if (info->request_cb == NULL)
-		goto fail;
+		info->request_cb(invocation, proxy, info->request_data);
+		g_object_unref(proxy);
+		return;
 
-	proxy = dbus_g_proxy_new_for_name(obex_conn, BT_OBEX_SERVICE_NAME,
-					  path, BT_OBEX_TRANSFER_INTERFACE);
+	} else if (g_strcmp0(method_name, "Progress") == 0) {
+		BT_DBG("+");
 
-	result = info->request_cb(context, proxy, info->request_data);
-	g_object_unref(proxy);
+		bt_obex_agent_info *info;
+		char *sender;
+		char *path = NULL;
+		gint64 transferred;
+		GDBusProxy *proxy;
+		GError *err = NULL;
 
-	return result;
-fail:
-	BT_ERR("Fail case");
-	dbus_g_method_return(context, "");
-	return FALSE;
-}
+		info = __find_obex_agent_info((char *)object_path);
 
-gboolean bt_obex_agent_progress(BtObexAgent *agent, const char *path,
-		    guint64 transferred, DBusGMethodInvocation *context)
-{
-	BT_DBG("+");
+		if (info == NULL)
+			goto fail;
 
-	bt_obex_agent_info *info;
-	char *sender;
-	gboolean result;
-	DBusGProxy *proxy;
+		if (conn == NULL)
+			goto fail;
 
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+		sender = (char *)g_dbus_method_invocation_get_sender(invocation);
 
-	if (info == NULL)
-		goto fail;
-
-	if (obex_conn == NULL)
-		goto fail;
-
-	sender = dbus_g_method_get_sender(context);
-
-	if (g_strcmp0(sender, info->name) != 0) {
-		g_free(sender);
-		goto fail;
-	}
-
-	g_free(sender);
-
-	if (info->progress_cb == NULL)
-		goto fail;
-
-	proxy = dbus_g_proxy_new_for_name(obex_conn, BT_OBEX_SERVICE_NAME,
-					  path, BT_OBEX_TRANSFER_INTERFACE);
-
-	result = info->progress_cb(context, proxy, transferred, info->progress_data);
-
-	g_object_unref(proxy);
-
-	BT_DBG("-");
-
-	return result;
-fail:
-	BT_ERR("Fail case");
-	dbus_g_method_return(context, "");
-	BT_DBG("-");
-	return FALSE;
-}
-
-gboolean bt_obex_agent_error(BtObexAgent *agent, const char *path,
-			 const char *message, DBusGMethodInvocation *context)
-{
-	bt_obex_agent_info *info;
-	char *sender;
-	DBusGProxy *proxy;
-	gboolean result;
-
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
-
-	if (info == NULL)
-		goto fail;
-
-	if (obex_conn == NULL)
-		goto fail;
-
-	sender = dbus_g_method_get_sender(context);
-
-	if (g_strcmp0(sender, info->name) != 0) {
-		g_free(sender);
-		goto fail;
-	}
-
-	g_free(sender);
-
-	if (info->error_cb == NULL)
-		goto fail;
-
-	proxy = dbus_g_proxy_new_for_name(obex_conn, BT_OBEX_SERVICE_NAME,
-					  path, BT_OBEX_TRANSFER_INTERFACE);
-
-	result = info->error_cb(context, proxy, message, info->progress_data);
-
-	g_object_unref(proxy);
-
-	return result;
-fail:
-	BT_ERR("Fail case");
-	dbus_g_method_return(context, "");
-	return FALSE;
-}
-
-gboolean bt_obex_agent_complete(BtObexAgent *agent, const char *path,
-				    DBusGMethodInvocation *context)
-{
-	bt_obex_agent_info *info;
-	char *sender;
-	DBusGProxy *proxy;
-	gboolean result;
-
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
-
-	if (info == NULL)
-		goto fail;
-
-	if (obex_conn == NULL)
-		goto fail;
-
-	sender = dbus_g_method_get_sender(context);
-
-	if (g_strcmp0(sender, info->name) != 0) {
-		g_free(sender);
-		goto fail;
-	}
-
-	g_free(sender);
-
-	if (info->complete_cb == NULL)
-		goto fail;
-
-	proxy = dbus_g_proxy_new_for_name(obex_conn, BT_OBEX_SERVICE_NAME,
-					  path, BT_OBEX_TRANSFER_INTERFACE);
-
-	result = info->complete_cb(context, proxy, info->complete_data);
-
-	g_object_unref(proxy);
-
-	return result;
-fail:
-	BT_ERR("Fail case");
-	dbus_g_method_return(context, "");
-	return FALSE;
-}
-
-gboolean bt_obex_agent_release(BtObexAgent *agent, DBusGMethodInvocation *context)
-{
-	bt_obex_agent_info *info;
-	char *sender;
-	gboolean result;
-
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
-
-	if (info == NULL)
-		goto fail;
-
-	sender = dbus_g_method_get_sender(context);
-
-	if (info->name) {
-		/*In H2 if user denies auth,release will come without request and hence
-		info->name will be NULL */
 		if (g_strcmp0(sender, info->name) != 0) {
-			g_free(sender);
 			goto fail;
 		}
+
+		if (info->progress_cb == NULL)
+			goto fail;
+
+		g_variant_get(parameters, "(&ot)", &path, &transferred);
+		proxy = g_dbus_proxy_new_sync(conn, G_DBUS_CALL_FLAGS_NONE,
+					NULL,
+					BT_OBEX_SERVICE_NAME,
+					path,
+					BT_OBEX_TRANSFER_INTERFACE,
+					NULL, &err);
+
+		if (err) {
+			BT_ERR("Dbus Err: %s", err->message);
+			g_clear_error(&err);
+			goto fail;
+		}
+
+		info->progress_cb(invocation, proxy, transferred, info->progress_data);
+
+		g_object_unref(proxy);
+
+		BT_DBG("-");
+
+		return;
+	} else if (g_strcmp0(method_name, "Error") == 0) {
+		bt_obex_agent_info *info;
+		char *sender;
+		GDBusProxy *proxy;
+		char *path, *message;
+		GError *err = NULL;
+
+		info = __find_obex_agent_info((char *)object_path);
+
+		if (info == NULL)
+			goto fail;
+
+		if (conn == NULL)
+			goto fail;
+
+		sender = (char *)g_dbus_method_invocation_get_sender(invocation);
+
+		if (g_strcmp0(sender, info->name) != 0) {
+			goto fail;
+		}
+
+		if (info->error_cb == NULL)
+			goto fail;
+		g_variant_get(parameters, "(&o&s)", &path, &message);
+		proxy = g_dbus_proxy_new_sync(conn, G_DBUS_CALL_FLAGS_NONE,
+					NULL,
+					BT_OBEX_SERVICE_NAME,
+					path,
+					BT_OBEX_TRANSFER_INTERFACE,
+					NULL, &err);
+		if (err) {
+			BT_ERR("Dbus Err: %s", err->message);
+			g_clear_error(&err);
+			goto fail;
+		}
+		info->error_cb(invocation, proxy, message, info->progress_data);
+
+		g_object_unref(proxy);
+
+		return;
+	} else if (g_strcmp0(method_name, "Complete") == 0) {
+		bt_obex_agent_info *info;
+		char *sender;
+		GDBusProxy *proxy;
+		char *path = NULL;
+		GError *err = NULL;
+
+		info = __find_obex_agent_info((char *)object_path);
+
+		if (info == NULL)
+			goto fail;
+
+		if (conn == NULL)
+			goto fail;
+
+		sender = (char *)g_dbus_method_invocation_get_sender(invocation);
+
+		if (g_strcmp0(sender, info->name) != 0) {
+			goto fail;
+		}
+
+		if (info->complete_cb == NULL)
+			goto fail;
+
+		g_variant_get(parameters, "(&o)", &path);
+		proxy = g_dbus_proxy_new_sync(conn, G_DBUS_CALL_FLAGS_NONE,
+					NULL,
+					BT_OBEX_SERVICE_NAME,
+					path,
+					BT_OBEX_TRANSFER_INTERFACE,
+					NULL, &err);
+		if (err) {
+			BT_ERR("Dbus Err: %s", err->message);
+			g_clear_error(&err);
+			goto fail;
+		}
+
+		info->complete_cb(invocation, proxy, info->complete_data);
+
+		g_object_unref(proxy);
+
+		return;
+	} else if (g_strcmp0(method_name, "Release") == 0) {
+		bt_obex_agent_info *info;
+		char *sender;
+
+		info = __find_obex_agent_info((char *)object_path);
+
+		if (info == NULL)
+			goto fail;
+
+		sender = (char *)g_dbus_method_invocation_get_sender(invocation);
+
+		if (info->name) {
+			/*In H2 if user denies auth,release will come without request and hence
+			info->name will be NULL */
+			if (g_strcmp0(sender, info->name) != 0) {
+				goto fail;
+			}
+		}
+
+		if (info->release_cb == NULL)
+			goto fail;
+
+		info->release_cb(invocation, info->release_data);
+
+		return;
 	}
-	g_free(sender);
-
-	if (info->release_cb == NULL)
-		goto fail;
-
-	result = info->release_cb(context, info->release_data);
-
-	return result;
 fail:
-	BT_ERR("Fail case");
-	dbus_g_method_return(context, "");
-	return FALSE;
+		BT_ERR("Fail case");
+		g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
-static void bt_obex_agent_init(BtObexAgent *agent)
+void _bt_obex_agent_new(char *path)
 {
-	BT_DBG("agent %p", agent);
-}
-
-static void bt_obex_agent_finalize(GObject *agent)
-{
-	bt_obex_agent_info *info;
-
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
-
-	if (info) {
-		g_free(info->path);
-		g_free(info->name);
-	}
-
-	G_OBJECT_CLASS(bt_obex_agent_parent_class)->finalize(agent);
-}
-
-static void bt_obex_agent_class_init(BtObexAgentClass *agent_class)
-{
-	GObjectClass *object_class;
+	bt_obex_agent_info *info = NULL;
 	GError *error = NULL;
 
-	object_class = (GObjectClass *)agent_class;
-
-	g_type_class_add_private(agent_class, sizeof(bt_obex_agent_info));
-
-	object_class->finalize = bt_obex_agent_finalize;
-
-	obex_conn = dbus_g_bus_get(DBUS_BUS_SESSION, &error);
-
-	if (error != NULL) {
-		BT_ERR("Fail to get dbus: %s", error->message);
-		g_error_free(error);
+	if (conn == NULL) {
+		conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+		if (error != NULL) {
+			BT_ERR("Fail to get dbus: %s", error->message);
+			g_error_free(error);
+			return;
+		}
 	}
-
-	dbus_g_object_type_install_info(BT_OBEX_TYPE_AGENT,
-				&dbus_glib_bt_obex_agent_object_info);
+	info = (bt_obex_agent_info *)malloc (sizeof(bt_obex_agent_info));
+	if (info) {
+		memset(info, 0, sizeof(bt_obex_agent_info));
+		info->path = g_strdup(path);
+		obex_agent_list = g_slist_append(obex_agent_list, info);
+	}
 }
 
-BtObexAgent *_bt_obex_agent_new(void)
+void _bt_obex_agent_destroy(char *path)
 {
-	BtObexAgent *agent;
+	bt_obex_agent_info *info = NULL;
+	info = __find_obex_agent_info(path);
+	if (info == NULL) {
+		BT_ERR("obex agent info not found on path %s", path);
+		return;
+	}
+	obex_agent_list = g_slist_remove(obex_agent_list, info);
+	if (info->path)
+		g_free(info->path);
+	if (info->name)
+		g_free(info->name);
+	if (info->openobex_id)
+		g_dbus_connection_unregister_object(conn,
+			info->openobex_id);
+	if (info->obex_agent_id)
+		g_dbus_connection_unregister_object(conn,
+			info->obex_agent_id);
 
-	agent = BT_OBEX_AGENT(g_object_new(BT_OBEX_TYPE_AGENT, NULL));
-
-	return agent;
+	g_free(info);
 }
-
-gboolean _bt_obex_setup(BtObexAgent *agent, const char *path)
+gboolean _bt_obex_setup(const char *path)
 {
 	bt_obex_agent_info *info;
-	DBusGProxy *proxy;
-	GObject *object;
+	GDBusProxy *proxy;
+	GDBusNodeInfo *new_conn_node;
+	GError *err = NULL;
 
-	info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	info = __find_obex_agent_info((char *)path);
 
-	retv_if(obex_conn == NULL, FALSE);
 	retv_if(info == NULL, FALSE);
-	retv_if(info->path != NULL, FALSE);
 
-	info->path = g_strdup(path);
+	proxy = g_dbus_proxy_new_for_bus_sync(G_BUS_TYPE_SESSION,
+				G_DBUS_PROXY_FLAGS_NONE,
+				NULL,
+				BT_OBEX_SERVICE_NAME,
+				BT_OBEX_CLIENT_PATH,
+				BT_OBEX_AGENT_INTERFACE,
+				NULL,
+				&err);
 
-	proxy = dbus_g_proxy_new_for_name_owner(obex_conn, BT_OBEX_SERVICE_NAME,
-						BT_OBEX_CLIENT_PATH,
-						BT_OBEX_AGENT_INTERFACE, NULL);
 	g_free(info->name);
 
 	if (proxy != NULL) {
-		info->name = g_strdup(dbus_g_proxy_get_bus_name(proxy));
+		info->name = g_strdup(g_dbus_proxy_get_name(proxy));
 		g_object_unref(proxy);
 	} else {
 		info->name = NULL;
 	}
 
-	object = dbus_g_connection_lookup_g_object(obex_conn, info->path);
-	if (object != NULL)
-		g_object_unref(object);
+	new_conn_node = g_dbus_node_info_new_for_xml(obex_service_agent_xml1, NULL);
+	if (new_conn_node == NULL)
+		return FALSE;
 
-	dbus_g_connection_register_g_object(obex_conn, info->path, G_OBJECT(agent));
+	info->openobex_id = g_dbus_connection_register_object(conn, info->path,
+						new_conn_node->interfaces[0],
+						&method_table,
+						NULL, NULL, &err);
+	g_dbus_node_info_unref(new_conn_node);
+	if (err) {
+		BT_INFO("Dbus Err: %s", err->message);
+		g_clear_error(&err);
+		return FALSE;
+	}
+	if (info->openobex_id == 0)
+		BT_ERR("Error while registering object");
+	new_conn_node = g_dbus_node_info_new_for_xml(obex_service_agent_xml2, NULL);
 
-	dbus_g_object_register_marshaller(marshal_VOID__OBJECT_BOOLEAN,
-					  G_TYPE_NONE, DBUS_TYPE_G_OBJECT_PATH, G_TYPE_BOOLEAN,
-					  G_TYPE_INVALID);
-
-	dbus_g_object_register_marshaller(marshal_VOID__INT_INT,
-					  G_TYPE_NONE, G_TYPE_INT, G_TYPE_INT, G_TYPE_INVALID);
+	info->obex_agent_id = g_dbus_connection_register_object(conn, info->path,
+						new_conn_node->interfaces[0],
+						&method_table,
+						NULL, NULL, &err);
+	g_dbus_node_info_unref(new_conn_node);
+	if (info->obex_agent_id == 0)
+		BT_ERR("Error while registering object");
+	if (err) {
+		BT_INFO("Dbus Err: %s", err->message);
+		g_clear_error(&err);
+		return FALSE;
+	}
 	return TRUE;
 }
 
-void _bt_obex_set_authorize_cb(BtObexAgent *agent,
+void _bt_obex_set_authorize_cb(char *object_path,
 			 bt_obex_authorize_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info = __find_obex_agent_info(object_path);;
 
-	/* Fix : NULL_RETURNS */
-	if (info == NULL)
-		return;
-
-	info->authorize_cb = func;
-	info->authorize_data = data;
+	if (info) {
+		info->authorize_cb = func;
+		info->authorize_data = data;
+	}
 }
 
-void _bt_obex_set_release_cb(BtObexAgent *agent,
+void _bt_obex_set_release_cb(char *object_path,
 		       bt_obex_release_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info = __find_obex_agent_info(object_path);;
 
 	/* Fix : NULL_RETURNS */
 	if (info == NULL)
@@ -437,10 +504,10 @@ void _bt_obex_set_release_cb(BtObexAgent *agent,
 	info->release_data = data;
 }
 
-void _bt_obex_set_request_cb(BtObexAgent *agent,
+void _bt_obex_set_request_cb(char *object_path,
 		       bt_obex_request_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info = __find_obex_agent_info(object_path);;
 
 	/* Fix : NULL_RETURNS */
 	if (info == NULL)
@@ -450,10 +517,10 @@ void _bt_obex_set_request_cb(BtObexAgent *agent,
 	info->request_data = data;
 }
 
-void _bt_obex_set_progress_cb(BtObexAgent *agent,
+void _bt_obex_set_progress_cb(char *object_path,
 			bt_obex_progress_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info = __find_obex_agent_info(object_path);;
 
 	/* Fix : NULL_RETURNS */
 	if (info == NULL)
@@ -463,10 +530,10 @@ void _bt_obex_set_progress_cb(BtObexAgent *agent,
 	info->progress_data = data;
 }
 
-void _bt_obex_set_complete_cb(BtObexAgent *agent,
+void _bt_obex_set_complete_cb(char *object_path,
 			bt_obex_complete_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info =__find_obex_agent_info(object_path);;
 
 	/* Fix : NULL_RETURNS */
 	if (info == NULL)
@@ -476,10 +543,10 @@ void _bt_obex_set_complete_cb(BtObexAgent *agent,
 	info->complete_data = data;
 }
 
-void _bt_obex_set_error_cb(BtObexAgent *agent,
+void _bt_obex_set_error_cb(char *object_path,
 			bt_obex_error_cb func, gpointer data)
 {
-	bt_obex_agent_info *info = BT_OBEX_AGENT_GET_PRIVATE(agent);
+	bt_obex_agent_info *info = __find_obex_agent_info(object_path);;
 
 	/* Fix : NULL_RETURNS */
 	if (info == NULL)

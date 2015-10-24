@@ -1,0 +1,49 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+PROJECT(bt-httpproxy C)
+
+SET(SRCS bt-httpproxy.c)
+
+IF("${CMAKE_BUILD_TYPE}" STREQUAL "")
+	SET(CMAKE_BUILD_TYPE "Release")
+ENDIF("${CMAKE_BUILD_TYPE}" STREQUAL "")
+
+MESSAGE("Build type: ${CMAKE_BUILD_TYPE}")
+
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
+
+SET(PKG_MODULES
+	libprivilege-control
+	dbus-glib-1
+	gio-2.0
+	security-server
+	pkgmgr
+	eventsystem
+	libsoup-2.4
+)
+
+INCLUDE(FindPkgConfig)
+pkg_check_modules(hps_pkgs REQUIRED ${PKG_MODULES})
+
+FOREACH(flag ${hps_pkgs_CFLAGS})
+	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag} -Wall")
+ENDFOREACH(flag)
+
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC")
+SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
+SET(CMAKE_C_FLAGS_RELEASE "-O2")
+SET(APP_SYSCONFDIR /opt/var/lib/bluetooth)
+
+FIND_PROGRAM(DBUS_BINDING_TOOL NAMES dbus-binding-tool)
+
+SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--as-needed -pie")
+
+ADD_DEFINITIONS("-DHPS_FEATURE")
+ADD_DEFINITIONS("-DHPS_GATT_DB")
+
+ADD_EXECUTABLE(${PROJECT_NAME} ${SRCS})
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${hps_pkgs_LDFLAGS} -L${CMAKE_CURRENT_SOURCE_DIR}/../bt-api -lbluetooth-api)
+
+INSTALL(TARGETS ${PROJECT_NAME} DESTINATION bin)
+INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/org.projectx.httpproxy.service DESTINATION share/dbus-1/system-services)
+
+SET(PREFIX ${CMAKE_INSTALL_PREFIX})

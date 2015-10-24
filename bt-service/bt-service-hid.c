@@ -21,9 +21,8 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
 #include <glib.h>
+#include <gio/gio.h>
 #include <dlog.h>
 #include <string.h>
 #include <syspopup_caller.h>
@@ -35,22 +34,32 @@
 #include "bt-service-event.h"
 #include "bt-service-util.h"
 
-static void __bt_hid_connect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
-				    gpointer user_data)
+static void __bt_hid_connect_cb(GDBusProxy *proxy, GAsyncResult *res,
+					gpointer user_data)
 {
 	GError *g_error = NULL;
-	GArray *out_param1 = NULL;
-	GArray *out_param2 = NULL;
+	GVariant *out_param1 = NULL;
+	GVariant *reply = NULL;
 	bluetooth_device_address_t device_addr = { {0} };
 	int result = BLUETOOTH_ERROR_NONE;
 	bt_function_data_t *func_data;
 	request_info_t *req_info;
 
-	dbus_g_proxy_end_call(proxy, call, &g_error, G_TYPE_INVALID);
-
-	g_object_unref(proxy);
-
+	BT_DBG("+");
 	func_data = user_data;
+
+	reply = g_dbus_proxy_call_finish(proxy, res, &g_error);
+	g_object_unref(proxy);
+	if (reply == NULL) {
+		BT_ERR("Hid Connect Dbus Call Error");
+		if (g_error) {
+			BT_ERR("Error: %s\n", g_error->message);
+			g_clear_error(&g_error);
+		}
+		result = BLUETOOTH_ERROR_INTERNAL;
+	}
+	g_variant_unref(reply);
+
 
 	if (func_data == NULL) {
 		/* Send reply */
@@ -64,58 +73,53 @@ static void __bt_hid_connect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 		goto done;
 	}
 
-	if (g_error != NULL) {
-		BT_ERR("Hidh Connect Dbus Call Error: %s\n", g_error->message);
-		result = BLUETOOTH_ERROR_INTERNAL;
-	}
-
 	if (req_info->context == NULL)
 		goto done;
-
-	out_param1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param2 = g_array_new(FALSE, FALSE, sizeof(gchar));
-
+	BT_DBG("Address: %s", func_data->address);
 	_bt_convert_addr_string_to_type(device_addr.addr,
 					func_data->address);
 
-	g_array_append_vals(out_param1, &device_addr,
-				sizeof(bluetooth_device_address_t));
-	g_array_append_vals(out_param2, &result, sizeof(int));
+	out_param1 = g_variant_new_from_data((const GVariantType *)"ay",
+			&device_addr, sizeof(bluetooth_device_address_t), TRUE, NULL, NULL);
 
-	dbus_g_method_return(req_info->context, out_param1, out_param2);
-
-	g_array_free(out_param1, TRUE);
-	g_array_free(out_param2, TRUE);
+	g_dbus_method_invocation_return_value(req_info->context,
+			g_variant_new("iv", result, out_param1));
 
 	_bt_delete_request_list(req_info->req_id);
 	BT_DBG("HID Connected..");
-done:
-	if (g_error)
-		g_error_free(g_error);
 
+done:
 	if (func_data) {
 		g_free(func_data->address);
 		g_free(func_data);
 	}
 }
 
-static void __bt_hid_disconnect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
-				    gpointer user_data)
+static void __bt_hid_disconnect_cb(GDBusProxy *proxy,GAsyncResult *res,
+					gpointer user_data)
 {
 	GError *g_error = NULL;
-	GArray *out_param1 = NULL;
-	GArray *out_param2 = NULL;
+	GVariant *out_param1 = NULL;
+	GVariant *reply;
 	bluetooth_device_address_t device_addr = { {0} };
 	int result = BLUETOOTH_ERROR_NONE;
 	bt_function_data_t *func_data;
 	request_info_t *req_info;
 
-	dbus_g_proxy_end_call(proxy, call, &g_error, G_TYPE_INVALID);
-
+	reply = g_dbus_proxy_call_finish(proxy, res, &g_error);
 	g_object_unref(proxy);
 
-	func_data = user_data;
+	if (reply == NULL) {
+		BT_ERR("Hid Disconnect Dbus Call Error");
+		if (g_error) {
+			BT_ERR("Error: %s\n", g_error->message);
+			g_clear_error(&g_error);
+		}
+		result = BLUETOOTH_ERROR_INTERNAL;
+	}
+	g_variant_unref(reply);
 
+	func_data = user_data;
 	if (func_data == NULL) {
 		/* Send reply */
 		BT_ERR("func_data == NULL");
@@ -128,34 +132,22 @@ static void __bt_hid_disconnect_cb(DBusGProxy *proxy, DBusGProxyCall *call,
 		goto done;
 	}
 
-	if (g_error != NULL) {
-		BT_ERR("Hidh Connect Dbus Call Error: %s\n", g_error->message);
-		result = BLUETOOTH_ERROR_INTERNAL;
-	}
-
 	if (req_info->context == NULL)
 		goto done;
-
-	out_param1 = g_array_new(FALSE, FALSE, sizeof(gchar));
-	out_param2 = g_array_new(FALSE, FALSE, sizeof(gchar));
-
+	BT_DBG("Address: %s", func_data->address);
 	_bt_convert_addr_string_to_type(device_addr.addr,
 					func_data->address);
 
-	g_array_append_vals(out_param1, &device_addr,
-				sizeof(bluetooth_device_address_t));
-	g_array_append_vals(out_param2, &result, sizeof(int));
+	out_param1 = g_variant_new_from_data((const GVariantType *)"ay",
+							&device_addr, sizeof(bluetooth_device_address_t), TRUE, NULL, NULL);
 
-	dbus_g_method_return(req_info->context, out_param1, out_param2);
-
-	g_array_free(out_param1, TRUE);
-	g_array_free(out_param2, TRUE);
+	g_dbus_method_invocation_return_value(req_info->context,
+			g_variant_new("iv", result, out_param1));
 
 	_bt_delete_request_list(req_info->req_id);
-done:
-	if (g_error)
-		g_error_free(g_error);
+	BT_DBG("HID Disconnected..");
 
+done:
 	if (func_data) {
 		g_free(func_data->address);
 		g_free(func_data);
@@ -172,17 +164,18 @@ int _bt_hid_connect(int request_id,
 {
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_function_data_t *func_data;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *conn;
+	/* GDBusProxy *adapter_proxy; */
+	GDBusConnection *conn;
 
 	int ret;
 	char *uuid;
 
 	BT_CHECK_PARAMETER(device_address, return);
 
+	/* Unused adapter proxy
 	adapter_proxy = _bt_get_adapter_proxy();
 	retv_if(adapter_proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
-
+	*/
 	conn = _bt_get_system_gconn();
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
@@ -211,16 +204,17 @@ int _bt_hid_disconnect(int request_id,
 {
 	char address[BT_ADDRESS_STRING_SIZE] = { 0 };
 	bt_function_data_t *func_data;
-	DBusGProxy *adapter_proxy;
-	DBusGConnection *conn;
+	/* GDBusProxy *adapter_proxy; */
+	GDBusConnection *conn;
 
 	int ret;
 
 	BT_CHECK_PARAMETER(device_address, return);
 
+	/* Unused adapter proxy
 	adapter_proxy = _bt_get_adapter_proxy();
 	retv_if(adapter_proxy == NULL, BLUETOOTH_ERROR_INTERNAL);
-
+	*/
 	conn = _bt_get_system_gconn();
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 

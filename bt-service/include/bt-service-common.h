@@ -27,8 +27,8 @@
 
 #include <sys/types.h>
 #include <dlog.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
+#include <glib.h>
+#include <gio/gio.h>
 
 #include "bluetooth-api.h"
 
@@ -89,12 +89,12 @@ extern "C" {
 	do { \
 		if (arg == NULL) \
 		{ \
-			BT_ERR("INVALID PARAMETER"); \
+			BT_ERR("%s is NULL", #arg); \
 			func BLUETOOTH_ERROR_INVALID_PARAM; \
 		} \
 	} while (0)
 
-#define BT_CHANNEL_LENGTH_MAX 5
+
 #define BT_ADDRESS_LENGTH_MAX 6
 #define BT_ADDRESS_STRING_SIZE 18
 #define BT_RFCOMM_BUFFER_MAX 1024
@@ -148,7 +148,7 @@ extern "C" {
 #define BT_PLAYER_CONTROL_INTERFACE "org.bluez.MediaPlayer1"
 #define BT_GATT_CHAR_INTERFACE "org.bluez.GattCharacteristic1"
 
-#define BT_INPUT_INTERFACE "org.bluez.Input"
+#define BT_INPUT_INTERFACE "org.bluez.Input1"
 #define BT_NETWORK_INTERFACE "org.bluez.Network"
 #define BT_NETWORK_CLIENT_INTERFACE "org.bluez.Network1"
 #define BT_SERIAL_INTERFACE "org.bluez.Serial"
@@ -200,6 +200,8 @@ extern "C" {
 
 /* UUID */
 #define GENERIC_AUDIO_UUID      "00001203-0000-1000-8000-00805f9b34fb"
+
+#define OBEX_OPP_UUID		"00001105-0000-1000-8000-00805f9b34fb"
 
 #define HSP_HS_UUID             "00001108-0000-1000-8000-00805f9b34fb"
 #define HSP_AG_UUID             "00001112-0000-1000-8000-00805f9b34fb"
@@ -261,7 +263,9 @@ typedef enum {
 	BT_PROFILE_CONN_NAP= 0x10,
 	BT_PROFILE_CONN_HFG= 0x20,
 	BT_PROFILE_CONN_GATT= 0x40,
-	BT_PROFILE_CONN_ALL= 0x80,
+	BT_PROGILE_CONN_NAP = 0x80,
+	BT_PROFILE_CONN_A2DP_SINK= 0x100,
+	BT_PROFILE_CONN_ALL= 0xffffffff,
 } bt_profile_type_t;
 
 typedef struct {
@@ -280,7 +284,7 @@ typedef struct {
 	char *address;
 	char *name;
 	char **uuids;
-	int uuid_count;
+	unsigned int uuid_count;
 	gboolean paired;
 	bluetooth_connected_link_t connected;
 	gboolean trust;
@@ -307,19 +311,19 @@ typedef struct {
 	char *address;
 } bt_function_data_t;
 
-DBusConnection *_bt_get_system_conn(void);
+GDBusConnection *_bt_get_system_conn(void);
 
-DBusGConnection *_bt_get_system_gconn(void);
+GDBusConnection *_bt_get_system_gconn(void);
 
-DBusGConnection *_bt_get_session_gconn(void);
+GDBusConnection *_bt_get_session_gconn(void);
 
 void *_bt_get_net_conn(void);
 
-DBusGProxy *_bt_get_manager_proxy(void);
+GDBusProxy *_bt_get_manager_proxy(void);
 
-DBusGProxy *_bt_get_adapter_proxy(void);
+GDBusProxy *_bt_get_adapter_proxy(void);
 
-DBusGProxy *_bt_get_adapter_properties_proxy(void);
+GDBusProxy *_bt_get_adapter_properties_proxy(void);
 
 char *_bt_get_device_object_path(char *address);
 
@@ -373,6 +377,8 @@ int _bt_set_socket_non_blocking(int socket_fd);
 int _bt_set_non_blocking_tty(int sk);
 
 void _bt_deinit_bluez_proxy(void);
+
+int _bt_eventsystem_set_value(const char *event, const char *key, const char *value);
 
 #ifdef __cplusplus
 }

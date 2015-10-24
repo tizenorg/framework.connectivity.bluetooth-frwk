@@ -28,6 +28,8 @@
 #include <stdint.h>
 
 #include "bt-common.h"
+#include "bt-internal-types.h"
+#include "bt-request-sender.h"
 
 #define GATT_SERV_INTERFACE		"org.bluez.GattService1"
 #define GATT_CHAR_INTERFACE		"org.bluez.GattCharacteristic1"
@@ -367,7 +369,6 @@ static void __bluetooth_internal_get_char_cb(GDBusProxy *proxy,
 	GVariantIter *char_iter;
 	GPtrArray *gp_array = NULL;
 	bt_gatt_discovered_char_t svc_char = { 0, };
-	int i;
 	char *char_handle;
 	GError *error = NULL;
 	bt_user_info_t *user_info;
@@ -400,20 +401,16 @@ static void __bluetooth_internal_get_char_cb(GDBusProxy *proxy,
 	g_variant_get(value, "(v)", &char_value);
 	g_variant_get(char_value, "ao", &char_iter);
 
-	int len = g_variant_get_size((GVariant *)char_iter);
-	if (len > 0) {
-		gp_array = g_ptr_array_new();
-		for (i = 0; i < len; i++) {
-			g_variant_iter_loop(char_iter, "&o",  &char_handle);
-			g_ptr_array_add(gp_array, (gpointer)char_handle);
-		}
-		if (gp_array->len != 0) {
-			svc_char.handle_info.count = gp_array->len;
-			svc_char.handle_info.handle =
-				__get_string_array_from_gptr_array(gp_array);
-		}
-		g_ptr_array_free(gp_array, TRUE);
+	gp_array = g_ptr_array_new();
+	while(g_variant_iter_loop(char_iter, "&o",  &char_handle));
+		g_ptr_array_add(gp_array, (gpointer)char_handle);
+
+	if (gp_array->len != 0) {
+		svc_char.handle_info.count = gp_array->len;
+		svc_char.handle_info.handle =
+			__get_string_array_from_gptr_array(gp_array);
 	}
+	g_ptr_array_free(gp_array, TRUE);
 
 	if (user_info) {
 		_bt_common_event_cb(BLUETOOTH_EVENT_GATT_SVC_CHAR_DISCOVERED,
@@ -621,7 +618,7 @@ void bluetooth_gatt_get_char_from_uuid_cb(GDBusProxy *proxy,
 	GError *error = NULL;
 	bt_user_info_t *user_info;
 	int ret = BLUETOOTH_ERROR_INTERNAL;
-	bt_gatt_char_property_t characteristic = {0, };
+	bt_gatt_char_property_t characteristic;
 
 	user_info = _bt_get_user_data(BT_COMMON);
 
@@ -976,7 +973,6 @@ BT_EXPORT_API int bluetooth_gatt_set_characteristics_value_by_type(
 {
 	GVariant *val;
 	GVariantBuilder *builder;
-	GError *error = NULL;
 	GDBusConnection *conn;
 	int i = 0;
 	int ret = BLUETOOTH_ERROR_NONE;
@@ -996,40 +992,17 @@ BT_EXPORT_API int bluetooth_gatt_set_characteristics_value_by_type(
 	}
 
 	val = g_variant_new("ay", builder);
-
-	if (write_type ==
-		BLUETOOTH_GATT_CHARACTERISTIC_PROPERTY_WRITE_NO_RESPONSE) {
-		g_dbus_connection_call_sync(conn,
-				BT_BLUEZ_NAME,
-				char_handle,
-				GATT_CHAR_INTERFACE,
-				"WriteValuebyType",
-				g_variant_new("(y@ay)", write_type, val),
-				NULL,
-				G_DBUS_CALL_FLAGS_NONE,
-				-1, NULL, &error);
-
-		if (error) {
-			BT_ERR("Set value Failed: %s", error->message);
-			g_clear_error(&error);
-			ret = BLUETOOTH_ERROR_INTERNAL;
-		}
-	} else if (write_type ==
-			BLUETOOTH_GATT_CHARACTERISTIC_PROPERTY_WRITE) {
-		g_dbus_connection_call(conn,
-				BT_BLUEZ_NAME,
-				char_handle,
-				GATT_CHAR_INTERFACE,
-				"WriteValuebyType",
-				g_variant_new("(y@ay)", write_type, val),
-				NULL,
-				G_DBUS_CALL_FLAGS_NONE,
-				-1, NULL,
-				(GAsyncReadyCallback)__bluetooth_internal_write_cb,
-				NULL);
-	} else
-		ret = BLUETOOTH_ERROR_INVALID_PARAM;
-
+	g_dbus_connection_call(conn,
+			BT_BLUEZ_NAME,
+			char_handle,
+			GATT_CHAR_INTERFACE,
+			"WriteValuebyType",
+			g_variant_new("(y@ay)", write_type, val),
+			NULL,
+			G_DBUS_CALL_FLAGS_NONE,
+			-1, NULL,
+			(GAsyncReadyCallback)__bluetooth_internal_write_cb,
+			NULL);
 
 	g_variant_builder_unref(builder);
 	return ret;
@@ -1200,7 +1173,6 @@ static void bluetooth_gatt_get_char_desc_cb(GDBusProxy *proxy,
 	GVariant *value;
 	GVariant	*char_value;
 	GVariantIter *char_iter;
-	int i;
 	char *char_handle;
 	GError *error = NULL;
 	bt_user_info_t *user_info;
@@ -1232,16 +1204,12 @@ static void bluetooth_gatt_get_char_desc_cb(GDBusProxy *proxy,
 	g_variant_get(value, "(v)", &char_value);
 	g_variant_get(char_value, "ao", &char_iter);
 
-	int len = g_variant_get_size((GVariant *)char_iter);
-	if (len > 0) {
-		for (i = 0; i < len; i++) {
-			g_variant_iter_loop(char_iter, "o",  &char_handle);
-			BT_DBG("object path of descriptor = %s",char_handle);
-			if(char_handle) {
+	while(g_variant_iter_loop(char_iter, "&o",  &char_handle)) {
+		BT_DBG("object path of descriptor = %s",char_handle);
+		if(char_handle) {
 				ret = __bluetooth_gatt_descriptor_iter(char_handle,
 							&characteristic);
 				BT_DBG("Descriptor read status [%d]",ret);
-			}
 		}
 	}
 
@@ -1457,6 +1425,23 @@ BT_EXPORT_API int bluetooth_gatt_write_descriptor_value(
 	return BLUETOOTH_ERROR_NONE;
 }
 
+static void __bluetooth_gatt_watch_characteristics(void)
+{
+	int result = BLUETOOTH_ERROR_NONE;
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+			BT_GATT_WATCH_CHARACTERISTIC,
+			in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result != BLUETOOTH_ERROR_NONE)
+			BT_ERR("Watch Characteristic request failed !");
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+}
+
 BT_EXPORT_API int bluetooth_gatt_watch_characteristics(const char *char_handle)
 {
 
@@ -1491,14 +1476,43 @@ BT_EXPORT_API int bluetooth_gatt_watch_characteristics(const char *char_handle)
 			ret = BLUETOOTH_ERROR_IN_PROGRESS;
 		else if (g_strrstr(error->message, "Operation is not supported"))
 			ret = BLUETOOTH_ERROR_NOT_SUPPORT;
+/*failed because of either Insufficient Authorization or Write Not Permitted */
+		else if (g_strrstr(error->message, "Write not permitted") ||
+				g_strrstr(error->message, "Operation Not Authorized"))
+			ret = BLUETOOTH_ERROR_PERMISSION_DEINED;
+/* failed because of either Insufficient Authentication,
+	Insufficient Encryption Key Size, or Insufficient Encryption. */
+		else if (g_strrstr(error->message, "Not paired"))
+			ret = BLUETOOTH_ERROR_NOT_PAIRED;
 		else
 			ret = BLUETOOTH_ERROR_INTERNAL;
 
 		g_clear_error(&error);
+	} else {
+		/* Register the client sender to bt-service */
+		__bluetooth_gatt_watch_characteristics();
 	}
 	BT_DBG("-");
 	return ret;
 }
+
+static void __bluetooth_gatt_unwatch_characteristics(void)
+{
+	int result = BLUETOOTH_ERROR_NONE;
+
+	BT_INIT_PARAMS();
+	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+
+	result = _bt_send_request(BT_BLUEZ_SERVICE,
+			BT_GATT_UNWATCH_CHARACTERISTIC,
+			in_param1, in_param2, in_param3, in_param4, &out_param);
+
+	if (result != BLUETOOTH_ERROR_NONE)
+			BT_ERR("Unwatch Characteristic request failed !");
+
+	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
+}
+
 
 BT_EXPORT_API int bluetooth_gatt_unwatch_characteristics(const char *char_handle)
 {
@@ -1530,6 +1544,9 @@ BT_EXPORT_API int bluetooth_gatt_unwatch_characteristics(const char *char_handle
 		BT_ERR("Watch Failed: %s", error->message);
 		g_clear_error(&error);
 		ret =  BLUETOOTH_ERROR_INTERNAL;
+	} else {
+		/* Unregister the client sender to bt-service */
+		__bluetooth_gatt_unwatch_characteristics();
 	}
 	BT_DBG("-");
 	return ret;

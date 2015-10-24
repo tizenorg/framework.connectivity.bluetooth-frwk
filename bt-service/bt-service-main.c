@@ -21,13 +21,18 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
+//#include <dbus/dbus-glib.h>
 #include <glib.h>
 #include <dlog.h>
 #include <string.h>
 #include <vconf.h>
+#include <vconf-internal-keys.h>
 
+#ifndef TIZEN_WEARABLE
 #include <privilege-control.h>
+#endif
+#include <bundle.h>
+#include <eventsystem.h>
 
 #include "bt-internal-types.h"
 #include "bt-service-common.h"
@@ -56,6 +61,8 @@ static void __bt_release_service(void)
 
 	_bt_clear_request_list();
 
+	_bt_clear_gatt_client_senders();
+
 	BT_DBG("Terminating the bt-service daemon");
 }
 
@@ -83,6 +90,10 @@ gboolean _bt_terminate_service(gpointer user_data)
 			if(vconf_set_int(VCONFKEY_BT_STATUS,
 					VCONFKEY_BT_STATUS_OFF) != 0)
 				BT_ERR("Set vconf failed\n");
+
+			if (_bt_eventsystem_set_value(SYS_EVENT_BT_STATE, EVT_KEY_BT_STATE,
+							EVT_VAL_BT_OFF) != ES_R_OK)
+				BT_ERR("Fail to set value");
 		}
 	}
 
@@ -93,6 +104,9 @@ gboolean _bt_terminate_service(gpointer user_data)
 			if(vconf_set_int(VCONFKEY_BT_LE_STATUS,
 					VCONFKEY_BT_LE_STATUS_OFF) != 0)
 				BT_ERR("Set vconf failed\n");
+			if (_bt_eventsystem_set_value(SYS_EVENT_BT_STATE, EVT_KEY_BT_LE_STATE,
+							EVT_VAL_BT_LE_OFF) != ES_R_OK)
+				BT_ERR("Fail to set value");
 		}
 	}
 
@@ -161,16 +175,16 @@ static gboolean __bt_check_bt_service(void *data)
 		BT_ERR("no bluetooth le info, so BT LE was disabled at previous session");
 	}
 
-	if (vconf_get_int(BT_OFF_DUE_TO_FLIGHT_MODE, &flight_mode_deactivation) != 0)
+	if (vconf_get_int(VCONFKEY_BT_FLIGHT_MODE_DEACTIVATED, &flight_mode_deactivation) != 0)
 		BT_ERR("Fail to get the flight_mode_deactivation value");
 
 #if 0
-	if (vconf_get_int(BT_OFF_DUE_TO_POWER_SAVING_MODE, &ps_mode_deactivation) != 0)
+	if (vconf_get_int(VCONFKEY_BT_POWERSAVING_MODE_DEACTIVATED, &ps_mode_deactivation) != 0)
 		BT_ERR("Fail to get the ps_mode_deactivation value");
 #endif
 
-	if (vconf_get_int(BT_OFF_DUE_TO_TIMEOUT, &bt_off_due_to_timeout) != 0)
-		BT_ERR("Fail to get BT_OFF_DUE_TO_TIMEOUT");
+	if (vconf_get_int(VCONFKEY_BT_OFF_DUE_TO_TIMEOUT, &bt_off_due_to_timeout) != 0)
+		BT_ERR("Fail to get VCONFKEY_BT_OFF_DUE_TO_TIMEOUT");
 
 	if ((bt_status != VCONFKEY_BT_STATUS_OFF || bt_off_due_to_timeout) &&
 		(status == BT_DEACTIVATED)) {
@@ -213,9 +227,11 @@ int main(void)
 	sigaction(SIGTERM, &sa, NULL);
 
 	g_type_init();
+#ifndef TIZEN_WEARABLE
 	if (perm_app_set_privilege("bluetooth-frwk-service", NULL, NULL) !=
 		PC_OPERATION_SUCCESS)
 		BT_ERR("Failed to set app privilege");
+#endif
 	/* Event reciever Init */
 	if (_bt_init_service_event_receiver() != BLUETOOTH_ERROR_NONE) {
 		BT_ERR("Fail to init event reciever");
@@ -246,6 +262,8 @@ int main(void)
 	_bt_init_request_id();
 
 	_bt_init_request_list();
+
+	_bt_init_gatt_client_senders();
 
 	g_timeout_add(500, (GSourceFunc)__bt_check_bt_service, NULL);
 

@@ -33,11 +33,6 @@
 extern "C" {
 #endif
 
-#define BT_LE_SCAN_INTERVAL_MIN 2.5
-#define BT_LE_SCAN_INTERVAL_MAX 10240
-#define BT_LE_SCAN_WINDOW_MIN 2.5
-#define BT_LE_SCAN_WINDOW_MAX 10240
-
 typedef enum {
 	BT_DEACTIVATED,
 	BT_ACTIVATED,

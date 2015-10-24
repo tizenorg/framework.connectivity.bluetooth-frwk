@@ -111,11 +111,11 @@ static char *__bt_get_control_device_path(void)
 
 static int __bt_media_send_control_msg(const char *name)
 {
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusError err;
-	DBusConnection *conn;
-	char *control_path;
+	GVariant *reply = NULL;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GDBusProxy *proxy = NULL;
+	char *control_path = NULL;
 
 	retv_if(name == NULL, BLUETOOTH_ERROR_INTERNAL);
 
@@ -126,27 +126,33 @@ static int __bt_media_send_control_msg(const char *name)
 	retv_if(control_path == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
 	BT_DBG("control_path %s", control_path);
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, control_path,
-				BT_PLAYER_CONTROL_INTERFACE, name);
-
-	retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(conn,
-				msg, -1, &err);
-	dbus_message_unref(msg);
-
-	if (!reply) {
-		BT_ERR("Error in Sending Control Command");
-
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
+	proxy = g_dbus_proxy_new_sync(conn, G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME, control_path,
+			BT_PLAYER_CONTROL_INTERFACE, NULL, &err);
+	if (proxy == NULL) {
+		BT_ERR("Unable to allocate new proxy \n");
+		if (err) {
+			BT_ERR("%s", err->message);
+			g_clear_error(&err);
 		}
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	dbus_message_unref(reply);
+	reply = g_dbus_proxy_call_sync(proxy, name, NULL,
+			G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+
+	g_object_unref(proxy);
+
+	if (!reply) {
+		BT_ERR("Error returned in method call");
+		if (err) {
+			BT_ERR("%s", err->message);
+			g_clear_error(&err);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	g_variant_unref(reply);
 
 	BT_DBG("-");
 	return BLUETOOTH_ERROR_NONE;
@@ -187,21 +193,33 @@ int _bt_avrcp_control_cmd(int type)
 	return ret;
 }
 
-DBusGProxy *__bt_get_control_properties_proxy(void)
+GDBusProxy *__bt_get_control_properties_proxy(void)
 {
-	DBusGProxy *proxy;
-	char *control_path;
-	DBusGConnection *conn;
+	GDBusProxy *proxy = NULL;
+	GError *error = NULL;
+	char *control_path = NULL;
+	GDBusConnection *conn = NULL;
 
 	control_path = __bt_get_control_device_path();
 	retv_if(control_path == NULL, NULL);
 	BT_DBG("control_path = %s", control_path);
 
-	conn = _bt_get_system_gconn();
+	conn = _bt_get_system_conn();
 	retv_if(conn == NULL, NULL);
 
-	proxy = dbus_g_proxy_new_for_name(conn, BT_BLUEZ_NAME,
-				control_path, BT_PROPERTIES_INTERFACE);
+	proxy = g_dbus_proxy_new_sync(conn,
+			G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME, control_path,
+			BT_PROPERTIES_INTERFACE, NULL, &error);
+	if (proxy == NULL) {
+		BT_ERR("Unable to allocate new proxy");
+		if (error) {
+			BT_ERR("%s", error->message);
+			g_clear_error(&error);
+		}
+		return NULL;
+	}
+
 	return proxy;
 }
 
@@ -336,218 +354,149 @@ static int __bt_media_attrval_to_val(int type, const char *value)
 
 int _bt_avrcp_control_get_property(int type, unsigned int *value)
 {
-	DBusGProxy *proxy;
+	GDBusProxy *proxy = NULL;
 	char *name = NULL;
 	int ret = BLUETOOTH_ERROR_NONE;
 	GError *err = NULL;
-	GValue attr_value = { 0 };
+	GVariant *reply = NULL;
 
 	BT_CHECK_PARAMETER(value, return);
 
 	proxy = __bt_get_control_properties_proxy();
 	retv_if(proxy == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
 
-	if (!dbus_g_proxy_call(proxy, "Get", &err,
-			G_TYPE_STRING, BT_PLAYER_CONTROL_INTERFACE,
-			G_TYPE_STRING, __bt_media_type_to_str(type),
-			G_TYPE_INVALID,
-			G_TYPE_VALUE, &attr_value,
-			G_TYPE_INVALID)) {
-		if (err != NULL) {
-			BT_ERR("Getting property failed: [%s]\n", err->message);
-			g_error_free(err);
-		}
-		g_object_unref(proxy);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
+	reply = g_dbus_proxy_call_sync(proxy,
+					"Get", g_variant_new("ss", BT_PLAYER_CONTROL_INTERFACE, __bt_media_type_to_str(type)),
+					G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+
 	g_object_unref(proxy);
 
-	switch (type) {
-	case EQUALIZER:
-	case REPEAT:
-	case SHUFFLE:
-	case SCAN:
-	case STATUS:
-		name = (char *)g_value_get_string(&attr_value);
-		*value = __bt_media_attrval_to_val(type, name);
-		BT_DBG("Type[%s] and Value[%s]", __bt_media_type_to_str(type), name);
-		break;
-	case POSITION:
-		*value = g_value_get_uint(&attr_value);
-		break;
-	default:
-		BT_DBG("Invalid Type\n");
-		ret =  BLUETOOTH_ERROR_INTERNAL;
-	}
-
+	if (!reply) {
+		BT_ERR("Can't get managed objects");
+		if (err) {
+			BT_ERR("%s", err->message);
+			g_clear_error(&err);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	} else {
+			switch (type) {
+			case EQUALIZER:
+			case REPEAT:
+			case SHUFFLE:
+			case SCAN:
+			case STATUS:
+				name =(char *)g_variant_get_string(reply, NULL);
+				*value = __bt_media_attrval_to_val(type, name);
+				BT_DBG("Type[%s] and Value[%s]", __bt_media_type_to_str(type), name);
+				break;
+			case POSITION:
+				*value = g_variant_get_uint32(reply);
+				break;
+			default:
+				BT_DBG("Invalid Type\n");
+				ret =  BLUETOOTH_ERROR_INTERNAL;
+			}
+		}
+	g_variant_unref(reply);
 	return ret;
 }
 
 int _bt_avrcp_control_set_property(int type, unsigned int value)
 {
-	GValue attr_value = { 0 };
-	DBusGProxy *proxy;
+	GValue *attr_value = NULL;
+	GDBusProxy *proxy = NULL;
 	GError *error = NULL;
+	GVariant *reply, *param;
 
-	proxy = __bt_get_control_properties_proxy();
-
-	retv_if(proxy == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
-	g_value_init(&attr_value, G_TYPE_STRING);
+	g_value_init(attr_value, G_TYPE_STRING);
 
 	switch (type) {
 	case EQUALIZER:
-		g_value_set_string(&attr_value, equalizer_status[value].property);
+		param = g_variant_new("s", equalizer_status[value].property);
 		BT_DBG("equalizer_status %s", equalizer_status[value].property);
 		break;
 	case REPEAT:
-		g_value_set_string(&attr_value, repeat_status[value].property);
+		param = g_variant_new("s", repeat_status[value].property);
 		BT_DBG("repeat_status %s", repeat_status[value].property);
 		break;
 	case SHUFFLE:
-		g_value_set_string(&attr_value, shuffle_settings[value].property);
+		param = g_variant_new("s", shuffle_settings[value].property);
 		BT_DBG("shuffle_settings %s", shuffle_settings[value].property);
 		break;
 	case SCAN:
-		g_value_set_string(&attr_value, scan_status[value].property);
+		param = g_variant_new("s", scan_status[value].property);
 		BT_DBG("scan_status %s", scan_status[value].property);
 		break;
 	default:
 		BT_ERR("Invalid property type: %d", type);
+		g_value_unset(attr_value);
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	dbus_g_proxy_call(proxy, "Set", &error,
-			G_TYPE_STRING, BT_PLAYER_CONTROL_INTERFACE,
-			G_TYPE_STRING, __bt_media_type_to_str(type),
-			G_TYPE_VALUE, &attr_value,
-			G_TYPE_INVALID, G_TYPE_INVALID);
+	proxy = __bt_get_control_properties_proxy();
+	retv_if(proxy == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
 
-	g_value_unset(&attr_value);
+	reply = g_dbus_proxy_call_sync(proxy,
+					"Set", g_variant_new("ssv", BT_PLAYER_CONTROL_INTERFACE, __bt_media_type_to_str(type), param),
+					G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+
 	g_object_unref(proxy);
+	g_variant_unref(param);
 
-	if (error) {
-		BT_ERR("SetProperty Fail: %s", error->message);
-		g_error_free(error);
-		return BLUETOOTH_ERROR_INTERNAL;
+	if (!reply) {
+		BT_ERR("Can't get managed objects");
+		if (error) {
+			BT_ERR("SetProperty Fail: %s", error->message);
+			g_clear_error(&error);
+			return BLUETOOTH_ERROR_INTERNAL;
+		}
 	}
+
+	g_variant_unref(reply);
+	g_value_unset(attr_value);
 
 	return BLUETOOTH_ERROR_NONE;
 }
 
-static gboolean __bt_avrcp_control_parse_metadata(
-					char **value_string,
-					unsigned int *value_uint,
-					int type,
-					DBusMessageIter *iter)
-{
-	if (dbus_message_iter_get_arg_type(iter) != type)
-		return FALSE;
-
-	if (type == DBUS_TYPE_STRING) {
-		char *value;
-		dbus_message_iter_get_basic(iter, &value);
-		*value_string = g_strdup(value);
-	} else if (type == DBUS_TYPE_UINT32) {
-		int value;
-		dbus_message_iter_get_basic(iter, &value);
-		*value_uint = value;
-	} else
-		return FALSE;
-
-	return TRUE;
-}
-
-
 static int __bt_avrcp_control_parse_properties(
 				media_metadata_attributes_t *metadata,
-				DBusMessageIter *iter)
+				GVariant *item)
 {
-	DBusMessageIter dict;
-	DBusMessageIter var;
-	int ctype;
-	char *value_string;
+	GVariant *value = NULL;
+	GVariantIter iter;
+	char *value_string = NULL;
 	unsigned int value_uint;
+	const char *key = NULL;
 
-	ctype = dbus_message_iter_get_arg_type(iter);
-	if (ctype != DBUS_TYPE_ARRAY) {
-		BT_ERR("ctype error %d", ctype);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_recurse(iter, &dict);
-
-	while ((ctype = dbus_message_iter_get_arg_type(&dict)) !=
-							DBUS_TYPE_INVALID) {
-		DBusMessageIter entry;
-		const char *key;
-
-		if (ctype != DBUS_TYPE_DICT_ENTRY) {
-			BT_ERR("ctype error %d", ctype);
-			return BLUETOOTH_ERROR_INTERNAL;
-		}
-
-		dbus_message_iter_recurse(&dict, &entry);
-		if (dbus_message_iter_get_arg_type(&entry) !=
-							DBUS_TYPE_STRING) {
-			BT_ERR("ctype not DBUS_TYPE_STRING");
-			return BLUETOOTH_ERROR_INTERNAL;
-		}
-
-		dbus_message_iter_get_basic(&entry, &key);
-		dbus_message_iter_next(&entry);
-
-		if (dbus_message_iter_get_arg_type(&entry) !=
-							DBUS_TYPE_VARIANT) {
-			BT_ERR("ctype not DBUS_TYPE_VARIANT");
-			return FALSE;
-		}
-
-		dbus_message_iter_recurse(&entry, &var);
-
-		BT_ERR("Key value is %s", key);
-
-		if (strcasecmp(key, "Title") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_STRING, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+	g_variant_iter_init(&iter, item);
+	while (g_variant_iter_loop(&iter, "{sv}", &key, &value)){
+		if (strcasecmp(key, "Title") == 0){
+			value_string = (char *)g_variant_get_string(value, NULL);
 			BT_DBG("Value : %s ", value_string);
 			metadata->title = value_string;
 		} else if (strcasecmp(key, "Artist") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_STRING, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_string =(char *)g_variant_get_string(value, NULL);
 			BT_DBG("Value : %s ", value_string);
 			metadata->artist = value_string;
 		} else if (strcasecmp(key, "Album") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_STRING, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_string =(char *)g_variant_get_string(value, NULL);
 			BT_DBG("Value : %s ", value_string);
 			metadata->album = value_string;
 		} else if (strcasecmp(key, "Genre") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_STRING, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_string =(char *)g_variant_get_string(value, NULL);
 			BT_DBG("Value : %s ", value_string);
 			metadata->genre = value_string;
 		} else if (strcasecmp(key, "Duration") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_UINT32, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_uint = g_variant_get_uint32(value);
 			metadata->duration = value_uint;
 		} else if (strcasecmp(key, "NumberOfTracks") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_UINT32, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_uint = g_variant_get_uint32(value);
 			metadata->total_tracks = value_uint;
 		} else if (strcasecmp(key, "TrackNumber") == 0) {
-			if (!__bt_avrcp_control_parse_metadata(&value_string,
-					&value_uint, DBUS_TYPE_UINT32, &var))
-				return BLUETOOTH_ERROR_INTERNAL;
+			value_uint = g_variant_get_uint32(value);
 			metadata->number = value_uint;
 		} else
 			BT_DBG("%s not supported, ignoring", key);
-		dbus_message_iter_next(&dict);
 	}
 
 	if (!metadata->title)
@@ -560,18 +509,20 @@ static int __bt_avrcp_control_parse_properties(
 		metadata->genre = g_strdup("");
 
 	return BLUETOOTH_ERROR_NONE;
+
 }
 
 int _bt_avrcp_control_get_track_info(media_metadata_attributes_t *metadata)
 {
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusError err;
-	DBusConnection *conn;
-	char *control_path;
-	char *interface_name;
-	char *property_name;
-	DBusMessageIter arr, iter;
+	GDBusProxy *proxy = NULL;
+	GVariant *reply = NULL;
+	GVariant *item = NULL;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	char *control_path = NULL;
+	char *interface_name = NULL;
+	char *property_name = NULL;
+	GVariant *parameters = NULL;
 	int ret = BLUETOOTH_ERROR_NONE;
 
 	retv_if(metadata == NULL, BLUETOOTH_ERROR_INTERNAL);
@@ -583,131 +534,125 @@ int _bt_avrcp_control_get_track_info(media_metadata_attributes_t *metadata)
 	retv_if(control_path == NULL, BLUETOOTH_ERROR_NOT_CONNECTED);
 	BT_DBG("control_path %s", control_path);
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, control_path,
-				BT_PROPERTIES_INTERFACE, "Get");
-
-	retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	interface_name = g_strdup(BT_PLAYER_CONTROL_INTERFACE);
-	property_name = g_strdup("Track");
-
-	dbus_message_append_args(msg,
-		DBUS_TYPE_STRING, &interface_name,
-		DBUS_TYPE_STRING, &property_name,
-		DBUS_TYPE_INVALID);
-
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(conn,
-				msg, -1, &err);
-
-	g_free(interface_name);
-	g_free(property_name);
-	dbus_message_unref(msg);
-
-	if (!reply) {
-		BT_ERR("Error in getting Metadata");
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
+	proxy = g_dbus_proxy_new_sync(conn, G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME, control_path,
+			BT_PROPERTIES_INTERFACE, NULL, &err);
+	if (proxy == NULL) {
+		BT_ERR("Unable to allocate new proxy \n");
+		if (err) {
+			BT_ERR("%s", err->message);
+			g_clear_error(&err);
 		}
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	dbus_message_iter_init(reply, &iter);
-	dbus_message_iter_recurse(&iter, &arr);
+	interface_name = g_strdup(BT_PLAYER_CONTROL_INTERFACE);
+	property_name = g_strdup("Track");
 
-	ret = __bt_avrcp_control_parse_properties(metadata, &arr);
-	dbus_message_unref(reply);
+	parameters = g_variant_new("(ss)", interface_name, property_name);
 
+	g_free(interface_name);
+	g_free(property_name);
+
+	reply = g_dbus_proxy_call_sync(proxy, "Get", parameters,
+					G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+
+	g_object_unref(proxy);
+
+	if (!reply) {
+		BT_ERR("Error returned in method call");
+		if (err) {
+			BT_ERR("%s", err->message);
+			g_clear_error(&err);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	g_variant_get(reply, "(v)", &item);
+
+	ret = __bt_avrcp_control_parse_properties(metadata, item);
+
+	g_variant_unref(reply);
 	BT_DBG("-");
 	return ret;
 }
 
-void _bt_handle_avrcp_control_event(DBusMessageIter *msg_iter, const char *path)
+void _bt_handle_avrcp_control_event(GVariant *reply, const char *path)
 {
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
+	GVariant *param = NULL;
 	const char *property = NULL;
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
+	if (!reply) {
+		BT_ERR("Error returned in method call\n");
 		return;
 	}
 
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
+	GVariantIter iter;
+	GVariant *value = NULL;
+	g_variant_iter_init(&iter, reply);
+	while (g_variant_iter_loop(&iter, "{sv}", &property,
+				&value)) {
+		if ((strcasecmp(property, "Equalizer") == 0) ||
+			(strcasecmp(property, "Repeat") == 0) ||
+			(strcasecmp(property, "Shuffle") == 0) ||
+			(strcasecmp(property, "Scan") == 0) ||
+			(strcasecmp(property, "Status") == 0)){
+				const char *valstr;
+				unsigned int type, val;
 
-	dbus_message_iter_get_basic(&dict_iter, &property);
-	ret_if(property == NULL);
-
-	BT_DBG("property : %s ", property);
-	ret_if(!dbus_message_iter_next(&dict_iter));
-
-	if ((strcasecmp(property, "Equalizer") == 0) ||
-		(strcasecmp(property, "Repeat") == 0) ||
-		(strcasecmp(property, "Shuffle") == 0) ||
-		(strcasecmp(property, "Scan") == 0) ||
-		(strcasecmp(property, "Status") == 0)) {
-
-		const char *valstr;
-		int type, value;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &valstr);
-		BT_DBG("Value : %s ", valstr);
-		type = __bt_media_attr_to_type(property);
-		value = __bt_media_attrval_to_val(type, valstr);
+				valstr = g_variant_get_string(value, NULL);
+				BT_DBG("Value : %s ", valstr);
+				type = __bt_media_attr_to_type(property);
+				val = __bt_media_attrval_to_val(type, valstr);
 
 				/* Send event to application */
-		_bt_send_event(BT_AVRCP_CONTROL_EVENT,
-			__bt_media_attr_to_event(property),
-			DBUS_TYPE_UINT32, &value,
-			DBUS_TYPE_INVALID);
-	} else if (strcasecmp(property, "Position") == 0) {
-		unsigned int value;
+				param = g_variant_new("(u)", val);
+				_bt_send_event(BT_AVRCP_CONTROL_EVENT,
+					__bt_media_attr_to_event(property), param);
+		} else if (strcasecmp(property, "Position") == 0) {
+			unsigned int val;
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &value);
-		BT_DBG("Value : %d ", value);
+			val = g_variant_get_uint32(value);
+			BT_DBG("Value : %d ", val);
+
+			/* Send event to application */
+			param = g_variant_new("(u)", val);
+			_bt_send_event(BT_AVRCP_CONTROL_EVENT,
+				__bt_media_attr_to_event(property), param);
+		} else if (strcasecmp(property, "Track") == 0) {
+			int ret = BLUETOOTH_ERROR_NONE;
+			media_metadata_attributes_t metadata;
+
+			memset(&metadata, 0x00, sizeof(media_metadata_attributes_t));
+
+			ret = __bt_avrcp_control_parse_properties(
+								&metadata, reply);
+			if (BLUETOOTH_ERROR_NONE != ret){
+				/* Free key and value because of break unless free not required */
+				free((char *)property);
+				g_variant_unref(value);
+				break;
+			}
 
 				/* Send event to application */
-		_bt_send_event(BT_AVRCP_CONTROL_EVENT,
-			__bt_media_attr_to_event(property),
-			DBUS_TYPE_UINT32, &value,
-			DBUS_TYPE_INVALID);
-	} else if (strcasecmp(property, "Track") == 0) {
-		int ret = BLUETOOTH_ERROR_NONE;
-		media_metadata_attributes_t metadata;
+			param = g_variant_new("(ssssuuu)",
+							metadata.title,
+							metadata.artist,
+							metadata.album,
+							metadata.genre,
+							metadata.total_tracks,
+							metadata.number,
+							metadata.duration);
+			_bt_send_event(BT_AVRCP_CONTROL_EVENT,
+				BLUETOOTH_EVENT_AVRCP_TRACK_CHANGED, param);
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		memset(&metadata, 0x00, sizeof(media_metadata_attributes_t));
-
-		ret = __bt_avrcp_control_parse_properties(
-							&metadata, &value_iter);
-		if (BLUETOOTH_ERROR_NONE != ret)
-			return;
-
-				/* Send event to application */
-		_bt_send_event(BT_AVRCP_CONTROL_EVENT,
-			BLUETOOTH_EVENT_AVRCP_TRACK_CHANGED,
-			DBUS_TYPE_STRING, &metadata.title,
-			DBUS_TYPE_STRING, &metadata.artist,
-			DBUS_TYPE_STRING, &metadata.album,
-			DBUS_TYPE_STRING, &metadata.genre,
-			DBUS_TYPE_UINT32, &metadata.total_tracks,
-			DBUS_TYPE_UINT32, &metadata.number,
-			DBUS_TYPE_UINT32, &metadata.duration,
-			DBUS_TYPE_INVALID);
-
-		g_free((char *)metadata.title);
-		g_free((char *)metadata.artist);
-		g_free((char *)metadata.album);
-		g_free((char *)metadata.genre);
-	} else {
-		BT_DBG("Preprty not handled");
+			g_free((char *)metadata.title);
+			g_free((char *)metadata.artist);
+			g_free((char *)metadata.album);
+			g_free((char *)metadata.genre);
+		} else {
+			BT_DBG("Property not handled");
+		}
 	}
 
 	BT_DBG("-");

@@ -23,6 +23,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <glib.h>
+#include <dlog.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <termios.h>
+#include <net_connection.h>
 #include <dbus/dbus-glib-lowlevel.h>
 #include <dbus/dbus-glib.h>
 #include <dbus/dbus.h>
@@ -32,32 +38,84 @@
 #include <errno.h>
 #include <termios.h>
 #include <net_connection.h>
+#include <bundle.h>
+#include <eventsystem.h>
 
 #include "bluetooth-api.h"
 #include "bt-service-common.h"
 #include "bt-service-agent.h"
 
-static DBusGConnection *system_conn;
-static DBusGConnection *session_conn;
-static DBusGProxy *manager_proxy;
-static DBusGProxy *adapter_proxy;
+static GDBusConnection *system_conn;
+static GDBusConnection *session_conn;
+static GDBusProxy *manager_proxy;
+static GDBusProxy *adapter_proxy;
 static void *net_conn;
 
-static DBusGProxy *adapter_properties_proxy;
+static GDBusProxy *adapter_properties_proxy;
 
-static DBusGProxy *__bt_init_manager_proxy(void)
+static GDBusConnection *system_gconn = NULL;
+
+GDBusConnection *_bt_gdbus_init_system_gconn(void)
 {
-	DBusGProxy *proxy;
+	GError *error = NULL;
+
+	if (!g_thread_supported()) {
+		g_thread_init(NULL);
+	}
+
+//	dbus_g_thread_init();
+
+	g_type_init();
+
+	if (system_gconn != NULL)
+		return system_gconn;
+
+	system_gconn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+
+	if (!system_gconn) {
+		BT_ERR("Unable to connect to dbus: %s", error->message);
+		g_clear_error(&error);
+	}
+
+	return system_gconn;
+}
+
+GDBusConnection *_bt_gdbus_get_system_gconn(void)
+{
+	GDBusConnection *local_system_gconn = NULL;
+	GError *error = NULL;
+
+	if (system_gconn == NULL) {
+		system_gconn = _bt_gdbus_init_system_gconn();
+	} else if (g_dbus_connection_is_closed(system_gconn)){
+
+		local_system_gconn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+
+		if (!local_system_gconn) {
+			BT_ERR("Unable to connect to dbus: %s", error->message);
+			g_clear_error(&error);
+		}
+
+		system_gconn = local_system_gconn;
+	}
+
+	return system_gconn;
+}
+
+static GDBusProxy *__bt_init_manager_proxy(void)
+{
+	GDBusProxy *proxy;
 
 	g_type_init();
 
 	if (system_conn == NULL) {
-		system_conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, NULL);
+		system_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 		retv_if(system_conn == NULL, NULL);
 	}
 
-	proxy = dbus_g_proxy_new_for_name(system_conn, BT_BLUEZ_NAME,
-			BT_MANAGER_PATH, BT_MANAGER_INTERFACE);
+	proxy = g_dbus_proxy_new_sync(system_conn, G_DBUS_PROXY_FLAGS_NONE,
+								NULL, BT_BLUEZ_NAME,
+								BT_MANAGER_PATH, BT_MANAGER_INTERFACE,  NULL, NULL);
 
 	retv_if(proxy == NULL, NULL);
 
@@ -66,16 +124,16 @@ static DBusGProxy *__bt_init_manager_proxy(void)
 	return proxy;
 }
 
-static DBusGProxy *__bt_init_adapter_proxy(void)
+static GDBusProxy *__bt_init_adapter_proxy(void)
 {
-	DBusGProxy *manager_proxy;
-	DBusGProxy *proxy;
+	GDBusProxy *manager_proxy;
+	GDBusProxy *proxy;
 	char *adapter_path = NULL;
 
 	g_type_init();
 
 	if (system_conn == NULL) {
-		system_conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, NULL);
+		system_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 		retv_if(system_conn == NULL, NULL);
 	}
 
@@ -85,8 +143,9 @@ static DBusGProxy *__bt_init_adapter_proxy(void)
 	adapter_path = _bt_get_adapter_path();
 	retv_if(adapter_path == NULL, NULL);
 
-	proxy = dbus_g_proxy_new_for_name(system_conn, BT_BLUEZ_NAME,
-				adapter_path, BT_ADAPTER_INTERFACE);
+	proxy = g_dbus_proxy_new_sync(system_conn, G_DBUS_PROXY_FLAGS_NONE,
+								NULL, BT_BLUEZ_NAME,
+								adapter_path, BT_ADAPTER_INTERFACE,  NULL, NULL);
 
 	g_free(adapter_path);
 
@@ -97,16 +156,16 @@ static DBusGProxy *__bt_init_adapter_proxy(void)
 	return proxy;
 }
 
-static DBusGProxy *__bt_init_adapter_properties_proxy(void)
+static GDBusProxy *__bt_init_adapter_properties_proxy(void)
 {
-	DBusGProxy *manager_proxy;
-	DBusGProxy *proxy;
+	GDBusProxy *manager_proxy;
+	GDBusProxy *proxy;
 	char *adapter_path = NULL;
 
 	g_type_init();
 
 	if (system_conn == NULL) {
-		system_conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, NULL);
+		system_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 		retv_if(system_conn == NULL, NULL);
 	}
 
@@ -116,8 +175,9 @@ static DBusGProxy *__bt_init_adapter_properties_proxy(void)
 	adapter_path = _bt_get_adapter_path();
 	retv_if(adapter_path == NULL, NULL);
 
-	proxy = dbus_g_proxy_new_for_name(system_conn, BT_BLUEZ_NAME,
-				adapter_path, BT_PROPERTIES_INTERFACE);
+	proxy = g_dbus_proxy_new_sync(system_conn, G_DBUS_PROXY_FLAGS_NONE,
+									NULL, BT_BLUEZ_NAME,
+									adapter_path, BT_PROPERTIES_INTERFACE,  NULL, NULL);
 
 	g_free(adapter_path);
 
@@ -128,37 +188,37 @@ static DBusGProxy *__bt_init_adapter_properties_proxy(void)
 	return proxy;
 }
 
-DBusGConnection *__bt_init_system_gconn(void)
+GDBusConnection *__bt_init_system_gconn(void)
 {
 	g_type_init();
 
 	if (system_conn == NULL)
-		system_conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, NULL);
+		system_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
 
 	return system_conn;
 }
 
-DBusGConnection *__bt_init_session_conn(void)
+GDBusConnection *__bt_init_session_conn(void)
 {
 	if (session_conn == NULL)
-		session_conn = dbus_g_bus_get(DBUS_BUS_SESSION, NULL);
+		session_conn =g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
 
 	return session_conn;
 }
 
-DBusGConnection *_bt_get_session_gconn(void)
+GDBusConnection *_bt_get_session_gconn(void)
 {
 	return (session_conn) ? session_conn : __bt_init_session_conn();
 }
 
-DBusGConnection *_bt_get_system_gconn(void)
+GDBusConnection *_bt_get_system_gconn(void)
 {
 	return (system_conn) ? system_conn : __bt_init_system_gconn();
 }
 
-DBusConnection *_bt_get_system_conn(void)
+GDBusConnection *_bt_get_system_conn(void)
 {
-	DBusGConnection *g_conn;
+	GDBusConnection *g_conn;
 
 	if (system_conn == NULL) {
 		g_conn = __bt_init_system_gconn();
@@ -168,13 +228,13 @@ DBusConnection *_bt_get_system_conn(void)
 
 	retv_if(g_conn == NULL, NULL);
 
-	return dbus_g_connection_get_connection(g_conn);
+	return g_conn;
 }
 
-DBusGProxy *_bt_get_manager_proxy(void)
+GDBusProxy *_bt_get_manager_proxy(void)
 {
 	if (manager_proxy) {
-		const char *path =  dbus_g_proxy_get_path(manager_proxy);
+		const gchar *path =  g_dbus_proxy_get_object_path(manager_proxy);
 		if (path == NULL) {
 			BT_ERR("Already proxy released hence creating new proxy");
 			return  __bt_init_manager_proxy();
@@ -208,10 +268,10 @@ void *_bt_get_net_conn(void)
 	return (net_conn) ? net_conn : __bt_init_net_conn();
 }
 
-DBusGProxy *_bt_get_adapter_proxy(void)
+GDBusProxy *_bt_get_adapter_proxy(void)
 {
 	if (adapter_proxy) {
-		const char *path =  dbus_g_proxy_get_path(adapter_proxy);
+		const char *path =  g_dbus_proxy_get_object_path(adapter_proxy);
 		if (path == NULL) {
 			BT_ERR("Already proxy released hence creating new proxy");
 			return  __bt_init_adapter_proxy();
@@ -223,119 +283,71 @@ DBusGProxy *_bt_get_adapter_proxy(void)
 
 }
 
-DBusGProxy *_bt_get_adapter_properties_proxy(void)
+GDBusProxy *_bt_get_adapter_properties_proxy(void)
 {
 	return (adapter_properties_proxy) ? adapter_properties_proxy :
 					__bt_init_adapter_properties_proxy();
 }
 
-static char *__bt_extract_adapter_path(DBusMessageIter *msg_iter)
+static char *__bt_extract_adapter_path(GVariantIter *iter)
 {
 	char *object_path = NULL;
-	DBusMessageIter value_iter;
+	GVariantIter *interface_iter;
+	GVariantIter *svc_iter;
+	char *interface_str = NULL;
 
-	/* Parse the signature:  oa{sa{sv}}} */
-	retv_if(dbus_message_iter_get_arg_type(msg_iter) !=
-				DBUS_TYPE_OBJECT_PATH, NULL);
+	/* Parse the signature: oa{sa{sv}}} */
+	while (g_variant_iter_loop(iter, "{&oa{sa{sv}}}", &object_path,
+			&interface_iter)) {
 
-	dbus_message_iter_get_basic(msg_iter, &object_path);
-	retv_if(object_path == NULL, NULL);
+		if (object_path == NULL)
+			continue;
 
-	/* object array (oa) */
-	retv_if(dbus_message_iter_next(msg_iter) == FALSE, NULL);
-	retv_if(dbus_message_iter_get_arg_type(msg_iter) !=
-				DBUS_TYPE_ARRAY, NULL);
+		while (g_variant_iter_loop(interface_iter, "{&sa{sv}}",
+				&interface_str, &svc_iter)) {
+			if (g_strcmp0(interface_str, "org.bluez.Adapter1") != 0)
+				continue;
 
-	dbus_message_iter_recurse(msg_iter, &value_iter);
-
-	/* string array (sa) */
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-					DBUS_TYPE_DICT_ENTRY) {
-		char *interface_name = NULL;
-		DBusMessageIter interface_iter;
-
-		dbus_message_iter_recurse(&value_iter, &interface_iter);
-
-		retv_if(dbus_message_iter_get_arg_type(&interface_iter) !=
-			DBUS_TYPE_STRING, NULL);
-
-		dbus_message_iter_get_basic(&interface_iter, &interface_name);
-
-		if (g_strcmp0(interface_name, "org.bluez.Adapter1") == 0) {
-			/* Tizen don't allow the multi-adapter */
-			BT_DBG("Found an adapter: %s", object_path);
+			BT_DBG("Object Path: %s", object_path);
+			g_variant_iter_free(svc_iter);
+			g_variant_iter_free(interface_iter);
 			return g_strdup(object_path);
 		}
-
-		dbus_message_iter_next(&value_iter);
 	}
-
-	BT_DBG("There is no adapter");
-
 	return NULL;
 }
 
 char *_bt_get_adapter_path(void)
 {
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusMessageIter reply_iter;
-	DBusMessageIter value_iter;
-	DBusError err;
-	DBusConnection *conn;
+	GDBusConnection *conn;
+	GDBusProxy *manager_proxy;
+	GVariant *result = NULL;
+	GVariantIter *iter = NULL;
 	char *adapter_path = NULL;
 
 	conn = _bt_get_system_conn();
 	retv_if(conn == NULL, NULL);
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, BT_MANAGER_PATH,
-						BT_MANAGER_INTERFACE,
-						"GetManagedObjects");
+	manager_proxy = _bt_get_manager_proxy();
+	retv_if(manager_proxy == NULL, NULL);
 
-	retv_if(msg == NULL, NULL);
-
-	/* Synchronous call */
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(
-					conn, msg,
-					-1, &err);
-	dbus_message_unref(msg);
-
-	if (!reply) {
+	result = g_dbus_proxy_call_sync(manager_proxy, "GetManagedObjects",
+				NULL,
+				G_DBUS_CALL_FLAGS_NONE,
+				-1,
+				NULL,
+				NULL);
+	if (!result) {
 		BT_ERR("Can't get managed objects");
-
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
-		}
 		return NULL;
 	}
-
-	if (dbus_message_iter_init(reply, &reply_iter) == FALSE) {
-		BT_ERR("Fail to iterate the reply");
-		dbus_message_unref(reply);
-		return NULL;
-	}
-
-	dbus_message_iter_recurse(&reply_iter, &value_iter);
 
 	/* signature of GetManagedObjects:  a{oa{sa{sv}}} */
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-						DBUS_TYPE_DICT_ENTRY) {
-		DBusMessageIter msg_iter;
+	g_variant_get(result, "(a{oa{sa{sv}}})", &iter);
 
-		dbus_message_iter_recurse(&value_iter, &msg_iter);
-
-		adapter_path = __bt_extract_adapter_path(&msg_iter);
-		if (adapter_path != NULL) {
-			BT_DBG("Found the adapter path");
-			break;
-		}
-
-		dbus_message_iter_next(&value_iter);
-	}
-	dbus_message_unref(reply);
-
+	adapter_path = __bt_extract_adapter_path(iter);
+	g_variant_iter_free(iter);
+	g_variant_unref(result);
 	return adapter_path;
 }
 
@@ -362,12 +374,12 @@ void _bt_deinit_proxys(void)
 	_bt_deinit_bluez_proxy();
 
 	if (system_conn) {
-		dbus_g_connection_unref(system_conn);
+		g_object_unref(system_conn);
 		system_conn = NULL;
 	}
 
 	if (session_conn) {
-		dbus_g_connection_unref(session_conn);
+		g_object_unref(session_conn);
 		session_conn = NULL;
 	}
 
@@ -435,56 +447,6 @@ void _bt_convert_addr_type_to_string(char *address,
 			addr[3], addr[4], addr[5]);
 }
 
-void _bt_swap_byte_ordering(char *data, int data_len)
-{
-	char temp;
-	int i, j;
-
-	ret_if(data == NULL);
-
-	/* Swap to opposite endian */
-	for (i = 0, j = data_len - 1; i < data_len; i++, j--) {
-		temp = data[i];
-		data[i] = data[j];
-		data[j] = temp;
-	}
-}
-
-int _bt_byte_arr_cmp(const char *data1, const char *data2, int data_len)
-{
-	int i;
-
-	retv_if(data1 == NULL, -1);
-	retv_if(data2 == NULL, -1);
-
-	for (i = 0; i < data_len; i++) {
-		if (data1[i] != data2[i])
-			return data1[i] - data2[i];
-	}
-
-	return 0;
-}
-
-int _bt_byte_arr_cmp_with_mask(const char *data1, const char *data2,
-				const char *mask, int data_len)
-{
-	int i;
-	char a, b;
-
-	retv_if(data1 == NULL, -1);
-	retv_if(data2 == NULL, -1);
-	retv_if(mask == NULL, -1);
-
-	for (i = 0; i < data_len; i++) {
-		a = data1[i] & mask[i];
-		b = data2[i] & mask[i];
-		if (a != b)
-			return (int)(a - b);
-	}
-
-	return 0;
-}
-
 void _bt_print_device_address_t(const bluetooth_device_address_t *addr)
 {
 	BT_DBG("%2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X\n", addr->addr[0], addr->addr[1], addr->addr[2],
@@ -517,7 +479,7 @@ void _bt_free_device_info(bt_remote_dev_info_t *dev_info)
 	g_free(dev_info->manufacturer_data);
 
 	if (dev_info->uuids) {
-		for (i = 0; dev_info->uuids[i] != NULL; i++)
+		for (i = 0; i < dev_info->uuid_count && dev_info->uuids[i]; i++)
 			g_free(dev_info->uuids[i]);
 
 		g_free(dev_info->uuids);
@@ -586,6 +548,7 @@ gboolean _bt_utf8_validate(char *name)
 
 int _bt_register_osp_server_in_agent(int type, char *uuid, char *path, int fd)
 {
+	BT_DBG("+");
 	if (!_bt_agent_register_osp_server( type, uuid, path, fd))
 		return BLUETOOTH_ERROR_INTERNAL;
 
@@ -594,6 +557,7 @@ int _bt_register_osp_server_in_agent(int type, char *uuid, char *path, int fd)
 
 int _bt_unregister_osp_server_in_agent(int type, char *uuid)
 {
+	BT_DBG("+");
 	if (!_bt_agent_unregister_osp_server( type, uuid))
 		return BLUETOOTH_ERROR_INTERNAL;
 
@@ -643,88 +607,53 @@ int _bt_set_non_blocking_tty(int sk)
 	return BLUETOOTH_ERROR_NONE;
 }
 
-static char *__bt_extract_device_path(DBusMessageIter *msg_iter, char *address)
+static char *__bt_extract_device_path(GVariantIter *iter, char *address)
 {
 	char *object_path = NULL;
 	char device_address[BT_ADDRESS_STRING_SIZE] = { 0 };
 
-	/* Parse the signature:  oa{sa{sv}}} */
-	retv_if(dbus_message_iter_get_arg_type(msg_iter) !=
-				DBUS_TYPE_OBJECT_PATH, NULL);
-
-	dbus_message_iter_get_basic(msg_iter, &object_path);
-	retv_if(object_path == NULL, NULL);
-
-	_bt_convert_device_path_to_address(object_path, device_address);
-
-	if (g_strcmp0(address, device_address) == 0) {
-		return g_strdup(object_path);
+	/* Parse the signature: oa{sa{sv}}} */
+	while (g_variant_iter_loop(iter, "{&oa{sa{sv}}}", &object_path,
+			NULL)) {
+		retv_if(object_path == NULL, NULL);
+		_bt_convert_device_path_to_address(object_path, device_address);
+		if (g_strcmp0(address, device_address) == 0) {
+			return g_strdup(object_path);
+		}
 	}
-
 	return NULL;
 }
 
 char *_bt_get_device_object_path(char *address)
 {
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusMessageIter reply_iter;
-	DBusMessageIter value_iter;
-	DBusError err;
-	DBusConnection *conn;
 	char *object_path = NULL;
+	GDBusConnection *conn;
+	GDBusProxy *manager_proxy;
+	GVariant *result = NULL;
+	GVariantIter *iter = NULL;
 
 	conn = _bt_get_system_conn();
 	retv_if(conn == NULL, NULL);
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, BT_MANAGER_PATH,
-						BT_MANAGER_INTERFACE,
-						"GetManagedObjects");
+	manager_proxy = _bt_get_manager_proxy();
+	retv_if(manager_proxy == NULL, NULL);
 
-	retv_if(msg == NULL, NULL);
-
-	/* Synchronous call */
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(
-					conn, msg,
-					-1, &err);
-	dbus_message_unref(msg);
-
-	if (!reply) {
+	result = g_dbus_proxy_call_sync(manager_proxy, "GetManagedObjects",
+				NULL,
+				G_DBUS_CALL_FLAGS_NONE,
+				-1,
+				NULL,
+				NULL);
+	if (!result) {
 		BT_ERR("Can't get managed objects");
-
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
-		}
 		return NULL;
 	}
-
-	if (dbus_message_iter_init(reply, &reply_iter) == FALSE) {
-		BT_ERR("Fail to iterate the reply");
-		dbus_message_unref(reply);
-		return NULL;
-	}
-
-	dbus_message_iter_recurse(&reply_iter, &value_iter);
 
 	/* signature of GetManagedObjects:  a{oa{sa{sv}}} */
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-						DBUS_TYPE_DICT_ENTRY) {
-		DBusMessageIter msg_iter;
-
-		dbus_message_iter_recurse(&value_iter, &msg_iter);
-
-		object_path = __bt_extract_device_path(&msg_iter, address);
-		if (object_path != NULL) {
-			BT_DBG("Found the device path");
-			break;
-		}
-
-		dbus_message_iter_next(&value_iter);
-	}
-	dbus_message_unref(reply);
-
+	g_variant_get(result, "(a{oa{sa{sv}}})", &iter);
+	object_path = __bt_extract_device_path(iter, address);
+	g_variant_iter_free(iter);
+	g_variant_unref(result);
 	return object_path;
 }
 
@@ -734,11 +663,9 @@ char *_bt_get_profile_uuid128(bt_profile_type_t profile_type)
 	case BT_PROFILE_CONN_RFCOMM:
 		return strdup(RFCOMM_UUID_STR);
 	case BT_PROFILE_CONN_A2DP:
-#ifdef TIZEN_BT_A2DP_SINK_ENABLED
-		return strdup(A2DP_SOURCE_UUID);
-#else
 		return strdup(A2DP_SINK_UUID);
-#endif
+	case BT_PROFILE_CONN_A2DP_SINK:
+		return strdup(A2DP_SOURCE_UUID);
 	case BT_PROFILE_CONN_HSP:
 		return strdup(HFP_HS_UUID);
 	case BT_PROFILE_CONN_HID:
@@ -873,3 +800,64 @@ void _bt_logging_connection(gboolean connect, int addr_type)
 			le_conn, le_disc, edr_conn, edr_disc);
 }
 
+int _bt_eventsystem_set_value(const char *event, const char *key, const char *value)
+{
+	int ret;
+	bundle *b = NULL;
+
+	b = bundle_create();
+
+	bundle_add_str(b, key, value);
+
+	ret = eventsystem_send_system_event(event, b);
+
+	BT_DBG("eventsystem_send_system_event result: %d", ret);
+
+	bundle_free(b);
+
+	return ret;
+}
+
+void _bt_swap_byte_ordering(char *data, int data_len)
+{
+	char temp;
+	int i, j;
+
+	ret_if(data == NULL);
+	/* Swap to opposite endian */
+	for (i = 0, j = data_len - 1; i < data_len; i++, j--) {
+		temp = data[i];
+		data[i] = data[j];
+		data[j] = temp;
+		}
+}
+
+int _bt_byte_arr_cmp(const char *data1, const char *data2, int data_len)
+{
+	int i;
+
+	retv_if(data1 == NULL, -1);
+	retv_if(data2 == NULL, -1);
+	for (i = 0; i < data_len; i++) {
+		if (data1[i] != data2[i])
+			return data1[i] - data2[i];
+		}
+	return 0;
+}
+int _bt_byte_arr_cmp_with_mask(const char *data1, const char *data2,
+	const char *mask, int data_len)
+{
+	int i;
+	char a, b;
+
+	retv_if(data1 == NULL, -1);
+	retv_if(data2 == NULL, -1);
+	retv_if(mask == NULL, -1);
+	for (i = 0; i < data_len; i++) {
+		a = data1[i] & mask[i];
+		b = data2[i] & mask[i];
+		if (a != b)
+			return (int)(a - b);
+		}
+	return 0;
+}

@@ -26,40 +26,31 @@
 
 #include <stdint.h>
 #include <glib.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
+#include <gio/gio.h>
 
 #define BLUEZ_DEVICE_INTERFACE	"org.bluez.Device"
 
-#define GAP_TYPE_AGENT (gap_agent_get_type())
-#define GAP_GET_AGENT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), GAP_TYPE_AGENT, GapAgent))
-#define GAP_IS_AGENT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj), GAP_TYPE_AGENT))
+typedef enum {
+	GAP_AGENT_EXEC_NO_OPERATION,
+	GAP_AGENT_EXEC_PAIRING,
+	GAP_AGENT_EXEC_AUTHORZATION,
+	GAP_AGENT_EXEC_CONFIRM_MODE,
+} GapAgentExecType;
 
-#define GAP_AGENT_CLASS(class) (G_TYPE_CHECK_CLASS_CAST((class), GAP_TYPE_AGENT, \
-										GapAgentClass))
-#define GAP_GET_AGENT_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), GAP_TYPE_AGENT, \
-										GapAgentClass))
-#define GAP_IS_AGENT_CLASS(class) (G_TYPE_CHECK_CLASS_TYPE((class), GAP_TYPE_AGENT))
+typedef struct _GapAgentPrivate GapAgentPrivate;
 
-#define GAP_AGENT_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), GAP_TYPE_AGENT, \
-									GapAgentPrivate))
-
-typedef struct _GapAgent GapAgent;
-typedef struct _GapAgentClass GapAgentClass;
-
-typedef gboolean(*GapAgentPasskeyFunc) (GapAgent *agent,
-							DBusGProxy *device);
-typedef gboolean(*GapAgentDisplayFunc) (GapAgent *agent, DBusGProxy *device,
+typedef gboolean(*GapAgentPasskeyFunc) (GapAgentPrivate *agent,
+						GDBusProxy *device);
+typedef gboolean(*GapAgentDisplayFunc) (GapAgentPrivate *agent, GDBusProxy *device,
 								guint passkey);
-typedef gboolean(*GapAgentConfirmFunc) (GapAgent *agent, DBusGProxy *device,
+typedef gboolean(*GapAgentConfirmFunc) (GapAgentPrivate *agent, GDBusProxy *device,
 								guint passkey);
-typedef gboolean(*GapAgentAuthorizeFunc) (GapAgent *agent,
-						DBusGProxy *device,
-						const char *uuid);
-typedef gboolean(*GapAgentConfirmModeFunc) (GapAgent *agent,
+typedef gboolean(*GapAgentAuthorizeFunc) (GapAgentPrivate *agent,
+					GDBusProxy *device, const char *uuid);
+typedef gboolean(*GapAgentConfirmModeFunc) (GapAgentPrivate *agent,
 					const char *mode, const char *sender,
 					gboolean need_popup, void *data);
-typedef gboolean(*GapAgentCancelFunc) (GapAgent *agent,
+typedef gboolean(*GapAgentCancelFunc) (GapAgentPrivate *agent,
 							const char *address);
 typedef gboolean(*GapAgentIgnoreAutoPairingFunc) (const char *address);
 typedef uint8_t bool_t;
@@ -82,49 +73,61 @@ typedef enum {
 	GAP_AGENT_ACCEPT_ALWAYS,
 } GAP_AGENT_ACCEPT_TYPE_T;
 
-struct _GapAgent {
-	GObject parent;
+struct _GapAgentPrivate {
+	gchar *busname;
+	gchar *path;
+	GDBusProxy *adapter;
+
+	GDBusProxy *agent_manager;
+
+	GDBusProxy *dbus_proxy;
+
+	GapAgentExecType exec_type;
+	GDBusMethodInvocation *reply_context;
+
+	char pairing_addr[18];
+	char authorize_addr[18];
+
+	GSList *osp_servers;
+
+	GAP_AGENT_FUNC_CB cb;
+	gboolean canceled;
 };
 
-struct _GapAgentClass {
-	GObjectClass parent_class;
-};
+void _gap_agent_setup_dbus(GapAgentPrivate *agent, GAP_AGENT_FUNC_CB *func_cb,
+					const char *path, GDBusProxy *adapter);
+gboolean _gap_agent_register(GapAgentPrivate *agent);
+void _gap_agent_reset_dbus(GapAgentPrivate *agent);
 
-GapAgent *_gap_agent_new(void);
-void _gap_agent_setup_dbus(GapAgent *agent, GAP_AGENT_FUNC_CB *func_cb,
-					const char *path, DBusGProxy *adapter);
-gboolean _gap_agent_register(GapAgent *agent);
-void _gap_agent_reset_dbus(GapAgent *agent);
-
-gboolean gap_agent_reply_pin_code(GapAgent *agent, const guint accept,
+gboolean gap_agent_reply_pin_code(GapAgentPrivate *agent, const guint accept,
 						const char *pin_code,
-				      		DBusGMethodInvocation *context);
-gboolean gap_agent_reply_passkey(GapAgent *agent, const guint accept,
+						GDBusMethodInvocation *context);
+gboolean gap_agent_reply_passkey(GapAgentPrivate *agent, const guint accept,
 						const char *passkey,
-				     		DBusGMethodInvocation *context);
-gboolean gap_agent_reply_confirmation(GapAgent *agent, const guint accept,
-					  DBusGMethodInvocation *context);
-gboolean gap_agent_reply_authorize(GapAgent *agent, const guint accept,
-				       DBusGMethodInvocation *context);
+						GDBusMethodInvocation *context);
+gboolean gap_agent_reply_confirmation(GapAgentPrivate *agent, const guint accept,
+		GDBusMethodInvocation *context);
+gboolean gap_agent_reply_authorize(GapAgentPrivate *agent, const guint accept,
+		GDBusMethodInvocation *context);
 
-gboolean _gap_agent_exist_osp_server(GapAgent *agent, int type, char *uuid);
+gboolean _gap_agent_exist_osp_server(GapAgentPrivate *agent, int type, char *uuid);
 
-bt_agent_osp_server_t *_gap_agent_get_osp_server(GapAgent *agent, int type,
+bt_agent_osp_server_t *_gap_agent_get_osp_server(GapAgentPrivate *agent, int type,
 					char *uuid);
 
-gchar* _gap_agent_get_path(GapAgent *agent);
+gchar* _gap_agent_get_path(GapAgentPrivate *agent);
 
-gboolean _gap_agent_is_canceled(GapAgent *agent);
+gboolean _gap_agent_is_canceled(GapAgentPrivate *agent);
 
-void _gap_agent_set_canceled(GapAgent *agent, gboolean value);
+void _gap_agent_set_canceled(GapAgentPrivate *agent, gboolean value);
 
-gboolean _gap_agent_register_osp_server(GapAgent *agent,
+gboolean _gap_agent_register_osp_server(GapAgentPrivate *agent,
 						const gint type,
 						const char *uuid,
 						const char *path,
 						int fd);
 
-gboolean _gap_agent_unregister_osp_server(GapAgent *agent,
+gboolean _gap_agent_unregister_osp_server(GapAgentPrivate *agent,
 						const gint type,
 						const char *uuid);
 

@@ -39,6 +39,10 @@ int _bt_bond_device(int request_id,
 
 int _bt_cancel_bonding(void);
 
+int _bt_passkey_reply(const char *passkey, gboolean authentication_reply);
+
+int _bt_passkey_confirmation_reply(gboolean confirmation_reply);
+
 int _bt_unbond_device(int request_id,
 			bluetooth_device_address_t *device_address,
 			GArray **out_param1);
@@ -63,6 +67,13 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 int _bt_get_connected_link(bluetooth_device_address_t *device_address,
 			bluetooth_connected_link_t *connected);
 
+int _bt_set_pin_code(bluetooth_device_address_t *device_address,
+			bluetooth_device_pin_code_t *pin_code);
+
+int _bt_unset_pin_code(bluetooth_device_address_t *device_address);
+
+int _bt_get_device_pin_code(const char *address, char *pin_code);
+
 gboolean _bt_is_device_creating(void);
 
 void _bt_set_autopair_status_in_bonding_info(gboolean is_autopair);
@@ -73,19 +84,29 @@ char *_bt_get_bonded_device_name(char *address);
 
 gboolean _bt_is_bonding_device_address(const char *address);
 
-int _bt_connect_le_device(const bluetooth_device_address_t *bd_addr, gboolean auto_connect);
+int _bt_connect_le_device(int request_id,
+		const bluetooth_device_address_t *bd_addr,
+		gboolean auto_connect);
 
-int _bt_disconnect_le_device(const bluetooth_device_address_t *bd_addr);
+int _bt_disconnect_le_device(int request_id,
+		const bluetooth_device_address_t *bd_addr);
 
 int _bt_le_conn_update(unsigned char *device_address,
-				guint16 interval_min, guint16 interval_max,
+				float interval_min, float interval_max,
 				guint16 latency, guint16 time_out);
+
+int _bt_get_le_connection_parameter(bluetooth_le_connection_mode_t mode,
+		bluetooth_le_connection_param_t *param);
 
 int _bt_connect_profile(char *address, char *uuid,
 						void *cb, gpointer func_data);
 
 int _bt_disconnect_profile(char *address, char *uuid,
 						void *cb, gpointer func_data);
+int _bt_connect_le_ipsp_device(const bluetooth_device_address_t *bd_addr);
+
+int _bt_disconnect_le_ipsp_device(const bluetooth_device_address_t *bd_addr);
+
 
 #ifdef __cplusplus
 }

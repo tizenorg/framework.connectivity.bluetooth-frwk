@@ -1,19 +1,10 @@
 <manifest>
 	<define>
 		<domain name="bt-core"/>
-
-	<request>
-		<smack request="dbus" type="rwx"/>
-		<smack request="aul::launch" type="x"/>
-	</request>
-	<permit>
-		<smack permit="dbus" type="rwx"/>
-	</permit>
 	</define>
 	<assign>
 		<filesystem path="/etc/init.d/bluetooth-frwk-core" label="_" exec_label="none" />
-		<filesystem path="/usr/share/dbus-1/services/org.projectx.bt_core.service" label="_" exec_label="none" />
-		<filesystem path="/usr/bin/bt-core" label="_" exec_label="none"/>
+		<filesystem path="/usr/share/dbus-1/system-services/org.projectx.bt_core.service" label="_" exec_label="none" />
 	</assign>
 
 	<request>

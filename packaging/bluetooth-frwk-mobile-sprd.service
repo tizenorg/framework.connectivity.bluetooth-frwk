@@ -1,12 +1,8 @@
 [Unit]
 Description=Bluetooth service
-After=dbus.socket dbus.service
-Requires=dbus.socket
+After=multi-user.target
 
 [Service]
-User=system
-Group=system
-SmackProcessLabel=bt-service
 Type=dbus
 BusName=org.projectx.bt
 ExecStart=/usr/bin/bt-service

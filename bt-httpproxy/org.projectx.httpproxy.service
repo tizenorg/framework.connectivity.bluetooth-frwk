@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.projectx.httpproxy
+Exec=/usr/bin/bt-httpproxy
+User=root

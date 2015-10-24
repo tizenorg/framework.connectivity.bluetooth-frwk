@@ -37,15 +37,27 @@ guint manager_id;
 static gboolean new_service = FALSE;
 static gboolean new_char = FALSE;
 static int serv_id = 1;
+static int register_pending_cnt = 0;
 
 /* Introspection data for the service we are exporting */
 static const gchar service_introspection_xml[] =
 "<node name='/'>"
+"  <interface name='org.freedesktop.DBus.ObjectManager'>"
+"	 <method name='GetManagedObjects'>"
+"	  <arg type='a{oa{sa{sv}}}' name='object_paths_interfaces_and_properties' direction='out'/>"
+"	 </method>"
+"  </interface>"
 "  <interface name='org.bluez.GattService1'>"
 "    <property type='s' name='UUID' access='read'>"
 "    </property>"
-"    <property type='s' name='Includes' access='read'>"
-"    </property>"
+"	 <property type='b' name='primary' access='read'>"
+"	 </property>"
+"	 <property type='o' name='Device' access='read'>"
+"	 </property>"
+"	 <property type='ao' name='Characteristics' access='read'>"
+"	 </property>"
+"	 <property type='s' name='Includes' access='read'>"
+"	 </property>"
 "  </interface>"
 "</node>";
 
@@ -53,13 +65,37 @@ static const gchar service_introspection_xml[] =
 static const gchar characteristics_introspection_xml[] =
 "<node name='/'>"
 "  <interface name='org.bluez.GattCharacteristic1'>"
+"	 <method name='ReadValue'>"
+"		<arg type='s' name='address' direction='in'/>"
+"		<arg type='y' name='id' direction='in'/>"
+"		<arg type='q' name='offset' direction='in'/>"
+"		<arg type='ay' name='Value' direction='out'/>"
+"	 </method>"
+"	 <method name='WriteValue'>"
+"		<arg type='s' name='address' direction='in'/>"
+"		<arg type='y' name='id' direction='in'/>"
+"		<arg type='q' name='offset' direction='in'/>"
+"		<arg type='ay' name='value' direction='in'/>"
+"	 </method>"
+"	 <method name='StartNotify'>"
+"	 </method>"
+"	 <method name='StopNotify'>"
+"	 </method>"
+"  </interface>"
+"  <interface name='org.freedesktop.DBus.Properties'>"
 "    <property type='s' name='UUID' access='read'>"
 "    </property>"
 "    <property type='o' name='Service' access='read'>"
 "    </property>"
 "    <property type='ay' name='Value' access='readwrite'>"
 "    </property>"
+"    <property type='b' name='Notifying' access='read'>"
+"    </property>"
 "    <property type='as' name='Flags' access='read'>"
+"    </property>"
+"    <property type='s' name='Unicast' access='read'>"
+"    </property>"
+"    <property type='ao' name='Descriptors' access='read'>"
 "    </property>"
 "  </interface>"
 "</node>";
@@ -68,41 +104,28 @@ static const gchar characteristics_introspection_xml[] =
 static const gchar descriptor_introspection_xml[] =
 "<node name='/'>"
 "  <interface name='org.bluez.GattDescriptor1'>"
-"    <property type='s' name='UUID' access='read'>"
-"    </property>"
-"    <property type='o' name='Characteristic' access='read'>"
-"    </property>"
-"    <property type='ay' name='Value' access='readwrite'>"
-"    </property>"
-"    <property type='s' name='Permissions' access='read'>"
-"    </property>"
-"  </interface>"
-"</node>";
-
-static const gchar manager_introspection_xml[] =
-"<node name='/'>"
-"  <interface name='org.freedesktop.DBus.ObjectManager'>"
-"    <method name='GetManagedObjects'>"
-"     <arg type='a{oa{sa{sv}}}' name='object_paths_interfaces_and_properties' direction='out'/>"
-"	 </method>"
-"  </interface>"
-"</node>";
-
-static const gchar properties_introspection_xml[] =
-"<node name='/'>"
-"  <interface name='org.freedesktop.DBus.Properties'>"
-"	 <method name='Set'>"
-"		<arg type='s' name='interface' direction='in'/>"
-"		<arg type='s' name='name' direction='in'/>"
-"		<arg type='v' name='value' direction='in'/>"
-"	 </method>"
 "	 <method name='ReadValue'>"
 "		<arg type='s' name='address' direction='in'/>"
-"		<arg type='s' name='path' direction='in'/>"
 "		<arg type='y' name='id' direction='in'/>"
 "		<arg type='q' name='offset' direction='in'/>"
 "		<arg type='ay' name='Value' direction='out'/>"
 "	 </method>"
+"	 <method name='WriteValue'>"
+"		<arg type='s' name='address' direction='in'/>"
+"		<arg type='y' name='id' direction='in'/>"
+"		<arg type='q' name='offset' direction='in'/>"
+"		<arg type='ay' name='value' direction='in'/>"
+"	 </method>"
+"  </interface>"
+"  <interface name='org.freedesktop.DBus.Properties'>"
+"    <property type='s' name='UUID' access='read'>"
+"    </property>"
+"    <property type='o' name='Characteristic' access='read'>"
+"    </property>"
+"    <property type='ay' name='Value' access='read'>"
+"    </property>"
+"    <property type='s' name='Permissions' access='read'>"
+"    </property>"
 "  </interface>"
 "</node>";
 
@@ -114,6 +137,7 @@ struct gatt_service_info {
 	guint prop_id;
 	GSList *char_data;
 	gboolean is_svc_registered;
+	gboolean is_svc_primary;
 };
 
 struct gatt_char_info {
@@ -140,6 +164,7 @@ struct gatt_req_info {
 	gchar *svc_path;
 	guint  request_id;
 	guint  offset;
+	GDBusMethodInvocation *context;
 };
 
 static GSList *gatt_services = NULL;
@@ -155,14 +180,80 @@ static GSList *gatt_requests = NULL;
 #define GATT_CHAR_INTERFACE		"org.bluez.GattCharacteristic1"
 #define GATT_DESC_INTERFACE		"org.bluez.GattDescriptor1"
 
+#ifdef HPS_FEATURE
+#define BT_HPS_OBJECT_PATH "/org/projectx/httpproxy"
+#define BT_HPS_INTERFACE_NAME "org.projectx.httpproxy_service"
+#define PROPERTIES_CHANGED "PropertiesChanged"
+#define BT_HPS_PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"
+#endif
+
 static GDBusProxy *manager_gproxy = NULL;
 
 static struct gatt_char_info *__bt_gatt_find_gatt_char_info(
 			const char *service_path, const char *char_path);
+static struct gatt_desc_info *__bt_gatt_find_gatt_desc_info(
+			const char *serv_path, const char *char_path,
+			const char *desc_path);
 
 static struct gatt_req_info *__bt_gatt_find_request_info(guint request_id);
 
-static void __bt_gatt_manager_method_call(GDBusConnection *connection,
+#ifdef HPS_FEATURE
+static int __bt_send_event_to_hps(int event, GVariant *var)
+{
+	GError *error = NULL;
+	GVariant *parameters;
+	GDBusMessage *msg = NULL;
+
+	BT_DBG(" ");
+
+	retv_if(g_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
+
+	if (event == BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED) {
+		GVariantBuilder *inner_builder;
+		GVariantBuilder *invalidated_builder;
+
+		BT_DBG("BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED");
+		inner_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+
+		g_variant_builder_add(inner_builder, "{sv}", "WriteValue", var);
+
+		invalidated_builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+
+		parameters = g_variant_new("(a{sv}as)", inner_builder, invalidated_builder);
+		g_variant_builder_unref(invalidated_builder);
+		g_variant_builder_unref(inner_builder);
+	} else if (BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED) {
+		GVariantBuilder *inner_builder;
+		GVariantBuilder *invalidated_builder;
+
+		BT_DBG("BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED");
+		inner_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+
+		g_variant_builder_add(inner_builder, "{sv}", "ReadValue", var);
+
+		invalidated_builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+
+		parameters = g_variant_new("(a{sv}as)", inner_builder, invalidated_builder);
+		g_variant_builder_unref(invalidated_builder);
+		g_variant_builder_unref(inner_builder);
+	}
+
+	msg = g_dbus_message_new_signal(BT_HPS_OBJECT_PATH, BT_HPS_INTERFACE_NAME, PROPERTIES_CHANGED);
+	g_dbus_message_set_body(msg, parameters);
+	if (!g_dbus_connection_send_message(g_conn, msg,G_DBUS_SEND_MESSAGE_FLAGS_NONE, 0, NULL)) {
+		if (error != NULL) {
+			BT_ERR("D-Bus API failure: errCode[%x], \
+					message[%s]",
+					error->code, error->message);
+			g_clear_error(&error);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+	return BLUETOOTH_ERROR_NONE;
+}
+#endif
+
+static void __bt_gatt_serv_method_call(GDBusConnection *connection,
 					const gchar *sender,
 					const gchar *object_path,
 					const gchar *interface_name,
@@ -171,10 +262,15 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 					GDBusMethodInvocation *invocation,
 					gpointer user_data)
 {
-	if (g_strcmp0(method_name, "GetManagedObjects") == 0) {
+	GSList *l1;
 
+	if (g_strcmp0(method_name, "GetManagedObjects") == 0) {
 		BT_DBG("Getting values for service, chars and descriptors");
+
 		GVariantBuilder *builder;
+		GVariantBuilder *inner_builder1 = NULL;
+		GVariant *svc_char = NULL;
+		GSList *l4;
 		/*Main Builder */
 		builder = g_variant_builder_new(
 				G_VARIANT_TYPE("a{oa{sa{sv}}}"));
@@ -184,7 +280,14 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 		GVariantBuilder *svc_builder = NULL;
 		GVariantBuilder *inner_builder = NULL;
 
-		GSList *l1 = g_slist_last(gatt_services);
+		if (register_pending_cnt > 1) {
+			int len = g_slist_length(gatt_services);
+			l1 = g_slist_nth(gatt_services, len - register_pending_cnt);
+		} else {
+			l1 = g_slist_last(gatt_services);
+		}
+		register_pending_cnt--;
+
 		struct gatt_service_info *serv_info = l1->data;
 		if (serv_info == NULL) {
 			BT_ERR("service info value is NULL");
@@ -201,6 +304,23 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 		g_variant_builder_add(inner_builder, "{sv}", "UUID",
 				g_variant_new_string(serv_info->service_uuid));
 
+		g_variant_builder_add(inner_builder, "{sv}", "Primary",
+				g_variant_new_boolean(serv_info->is_svc_primary));
+
+		/*Characteristics*/
+		inner_builder1 = g_variant_builder_new(G_VARIANT_TYPE("ao"));
+		BT_DBG("Adding Charatarisitcs list");
+		for (l4 = serv_info->char_data; l4 != NULL; l4 = l4->next) {
+			struct gatt_char_info *char_info = l4->data;
+				g_variant_builder_add(inner_builder1, "o",
+					char_info->char_path);
+				BT_DBG("%s", char_info->char_path);
+		}
+
+		svc_char = g_variant_new("ao", inner_builder1);
+		g_variant_builder_add(inner_builder, "{sv}", "Characteristics",
+					svc_char);
+
 		g_variant_builder_add(svc_builder, "{sa{sv}}",
 							GATT_SERV_INTERFACE,
 							inner_builder);
@@ -208,6 +328,8 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 		g_variant_builder_add(builder, "{oa{sa{sv}}}",
 							serv_info->serv_path,
 							svc_builder);
+
+		g_variant_builder_unref(inner_builder1);
 
 		/* Prepare inner builder for GattCharacteristic1 interface */
 
@@ -223,8 +345,12 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 			GVariantBuilder *inner_builder = NULL;
 			GVariantBuilder *builder1 = NULL;
 			GVariantBuilder *builder2 = NULL;
+			GVariantBuilder *builder3 = NULL;
 			GVariant *char_val = NULL;
 			GVariant *flags_val = NULL;
+			GVariant *char_desc = NULL;
+			char *unicast = NULL;
+			gboolean notify = FALSE;
 			int i = 0;
 
 			char_builder = g_variant_builder_new(
@@ -269,6 +395,30 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 			flags_val = g_variant_new("as", builder2);
 			g_variant_builder_add(inner_builder, "{sv}", "Flags",
 						flags_val);
+
+			/* Notifying */
+			g_variant_builder_add(inner_builder, "{sv}", "Notifying",
+						g_variant_new("b", notify));
+
+			/* Unicast */
+			unicast = g_strdup("00:00:00:00:00:00");
+			g_variant_builder_add(inner_builder, "{sv}", "Unicast",
+						g_variant_new("s", unicast));
+
+			/*Descriptors*/
+			builder3 = g_variant_builder_new(G_VARIANT_TYPE("ao"));
+			BT_DBG("Adding Descriptors list");
+
+			for (l4 = char_info->desc_data; l4 != NULL; l4 = l4->next) {
+				struct gatt_desc_info *desc_info = l4->data;
+					g_variant_builder_add(builder3, "o",
+						desc_info->desc_path);
+					BT_DBG("%s", desc_info->desc_path);
+			}
+
+			char_desc = g_variant_new("ao", builder3);
+			g_variant_builder_add(inner_builder, "{sv}", "Descriptors",
+						char_desc);
 
 			g_variant_builder_add(char_builder, "{sa{sv}}",
 					GATT_CHAR_INTERFACE , inner_builder);
@@ -343,9 +493,12 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 				g_variant_builder_unref(desc_builder);
 			}
 
+			if (unicast)
+				g_free(unicast);
 			/*unref char builder pointers*/
 			g_variant_builder_unref(builder1);
 			g_variant_builder_unref(builder2);
+			g_variant_builder_unref(builder3);
 			g_variant_builder_unref(inner_builder);
 			g_variant_builder_unref(char_builder);
 		}
@@ -363,7 +516,274 @@ static void __bt_gatt_manager_method_call(GDBusConnection *connection,
 	}
 }
 
-static void __bt_gatt_prop_method_call(GDBusConnection *connection,
+static struct gatt_service_info *__bt_gatt_find_gatt_service_from_char(const char *char_path)
+{
+	GSList *l1, *l2;
+
+	for (l1 = gatt_services; l1 != NULL; l1 = l1->next) {
+		struct gatt_service_info *serv_info = l1->data;
+
+		for (l2 = serv_info->char_data; l2 != NULL; l2 = l2->next) {
+			struct gatt_char_info *char_info = l2->data;
+
+			if (g_strcmp0(char_info->char_path, char_path)
+						== 0)
+				return serv_info;
+		}
+	}
+	BT_ERR("Gatt service not found");
+	return NULL;
+}
+
+static struct gatt_service_info *__bt_gatt_find_gatt_service_from_desc(const char *desc_path)
+{
+	GSList *l1, *l2, *l3;
+
+	for (l1 = gatt_services; l1 != NULL; l1 = l1->next) {
+		struct gatt_service_info *serv_info = l1->data;
+
+		for (l2 = serv_info->char_data; l2 != NULL; l2 = l2->next) {
+			struct gatt_char_info *char_info = l2->data;
+
+			for (l3 = char_info->desc_data; l3 != NULL; l3 = l3->next) {
+				struct gatt_desc_info *desc_info = l3->data;
+
+				if (g_strcmp0(desc_info->desc_path, desc_path)
+							== 0)
+					return serv_info;
+			}
+		}
+	}
+	BT_ERR("Gatt service not found");
+	return NULL;
+}
+
+static struct gatt_char_info *__bt_gatt_find_gatt_char_from_desc(const char *desc_path)
+{
+	GSList *l1, *l2, *l3;
+
+	for (l1 = gatt_services; l1 != NULL; l1 = l1->next) {
+		struct gatt_service_info *serv_info = l1->data;
+
+		for (l2 = serv_info->char_data; l2 != NULL; l2 = l2->next) {
+			struct gatt_char_info *char_info = l2->data;
+
+			for (l3 = char_info->desc_data; l3 != NULL; l3 = l3->next) {
+				struct gatt_desc_info *desc_info = l3->data;
+
+				if (g_strcmp0(desc_info->desc_path, desc_path)
+							== 0)
+					return char_info;
+			}
+		}
+	}
+	BT_ERR("Gatt Characterisitc not found");
+	return NULL;
+}
+
+static void __bt_gatt_char_method_call(GDBusConnection *connection,
+					const gchar *sender,
+					const gchar *object_path,
+					const gchar *interface_name,
+					const gchar *method_name,
+					GVariant *parameters,
+					GDBusMethodInvocation *invocation,
+					gpointer user_data)
+{
+
+	if (g_strcmp0(method_name, "ReadValue") == 0) {
+		gchar *addr = NULL;
+		guint8 req_id = 1;
+		guint16 offset = 0;
+		bt_gatt_read_req_t read_req = {0, };
+		bt_user_info_t *user_info = NULL;
+		struct gatt_req_info *req_info = NULL;
+		struct gatt_service_info *svc_info = NULL;
+
+		int i;
+		BT_DBG("ReadValue");
+
+		g_variant_get(parameters, "(&syq)", &addr, &req_id, &offset);
+
+		BT_DBG("Application path = %s", object_path);
+
+		BT_DBG("Remote Device address number = %s", addr);
+		BT_DBG("Request id = %d, Offset = %d", req_id, offset);
+
+		BT_DBG("Sender = %s", sender);
+
+		read_req.att_handle = g_strdup(object_path);
+		read_req.address = g_strdup(addr);
+		read_req.req_id = req_id;
+		read_req.offset = offset;
+		svc_info = __bt_gatt_find_gatt_service_from_char(object_path);
+		if (svc_info != NULL) {
+			read_req.service_handle = g_strdup(svc_info->serv_path);
+			user_info = _bt_get_user_data(BT_COMMON);
+#ifdef HPS_FEATURE
+			GVariant *param = NULL;
+#endif
+
+			/* Store requets information */
+			req_info = g_new0(struct gatt_req_info, 1);
+			req_info->attr_path = g_strdup(object_path);
+			req_info->svc_path = g_strdup(read_req.service_handle);
+			req_info->request_id= req_id;
+			req_info->offset = offset;
+			req_info->context = invocation;
+			gatt_requests = g_slist_append(gatt_requests, req_info);
+
+			if (user_info != NULL) {
+				struct gatt_char_info *char_info = NULL;
+				_bt_common_event_cb(
+					BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED,
+					BLUETOOTH_ERROR_NONE, &read_req,
+					user_info->cb, user_info->user_data);
+			}
+#ifdef HPS_FEATURE
+			param = g_variant_new("(sssyq)",
+					read_req.att_handle,
+					read_req.service_handle,
+					read_req.address,
+					read_req.req_id,
+					read_req.offset);
+			__bt_send_event_to_hps(BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED, param);
+#endif
+		}
+
+		if (read_req.att_handle)
+			g_free(read_req.att_handle);
+		if (read_req.address)
+			g_free(read_req.address);
+		if (read_req.service_handle)
+			g_free(read_req.service_handle);
+		return;
+	} else if (g_strcmp0(method_name, "WriteValue") == 0) {
+		GVariant *var = NULL;
+		gchar *addr = NULL;
+		guint8 req_id = 0;
+		guint16 offset = 0;
+		bt_gatt_value_change_t value_change = {0, };
+		bt_user_info_t *user_info = NULL;
+		int len = 0;
+		struct gatt_service_info *svc_info = NULL;
+		struct gatt_req_info *req_info = NULL;
+#ifdef HPS_FEATURE
+		GVariant *param = NULL;
+#endif
+
+		BT_DBG("WriteValue");
+		BT_DBG("Application path = %s", object_path);
+		BT_DBG("Sender = %s", sender);
+
+		g_variant_get(parameters, "(&syq@ay)", &addr, &req_id, &offset, &var);
+
+		value_change.att_handle = g_strdup(object_path);
+		value_change.address = g_strdup(addr);
+		svc_info = __bt_gatt_find_gatt_service_from_char(object_path);
+		if (svc_info == NULL) {
+			g_variant_unref(var);
+			g_dbus_method_invocation_return_value(invocation, NULL);
+			return;
+		}
+
+		value_change.service_handle = g_strdup(svc_info->serv_path);
+		value_change.offset = offset;
+		value_change.req_id = req_id;
+
+		len = g_variant_get_size(var);
+		if (len > 0) {
+			char *data;
+
+			value_change.att_value = (guint8 *)malloc(len);
+			if (!value_change.att_value) {
+				BT_ERR("att_value is NULL");
+				g_variant_unref(var);
+				g_dbus_method_invocation_return_value(invocation, NULL);
+				return;
+			}
+
+			data = (char *)g_variant_get_data(var);
+			memcpy(value_change.att_value, data, len);
+		}
+
+		value_change.val_len = len;
+
+		/* Store requets information */
+		req_info = g_new0(struct gatt_req_info, 1);
+		req_info->attr_path = g_strdup(object_path);
+		req_info->svc_path = g_strdup(value_change.service_handle);
+		req_info->request_id= req_id;
+		req_info->offset = offset;
+		req_info->context = invocation;
+		gatt_requests = g_slist_append(gatt_requests, req_info);
+
+		user_info = _bt_get_user_data(BT_COMMON);
+		if (user_info != NULL) {
+			_bt_common_event_cb(
+				BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED,
+				BLUETOOTH_ERROR_NONE, &value_change,
+				user_info->cb, user_info->user_data);
+		}
+#ifdef HPS_FEATURE
+		if (len > 0) {
+			gchar *svc_path;
+			svc_path = g_strdup(svc_info->serv_path);
+			param = g_variant_new("(sssyq@ay)",
+					object_path,
+					svc_path,
+					addr,
+					req_id,
+					offset,
+					var);
+			__bt_send_event_to_hps(BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED, param);
+			if (svc_path)
+				g_free(svc_path);
+		}
+#endif
+		g_variant_unref(var);
+		return;
+	} else if (g_strcmp0(method_name, "StartNotify") == 0) {
+		bt_user_info_t *user_info = NULL;
+		bt_gatt_char_notify_change_t notify_change = {0, };
+		BT_DBG("StartNotify");
+		user_info = _bt_get_user_data(BT_COMMON);
+		if (user_info != NULL) {
+			struct gatt_service_info *svc_info = NULL;
+			svc_info = __bt_gatt_find_gatt_service_from_char(object_path);
+			if (svc_info) {
+				notify_change.service_handle = g_strdup(svc_info->serv_path);
+				notify_change.att_handle = g_strdup(object_path);
+				notify_change.att_notify = TRUE;
+				_bt_common_event_cb(
+					BLUETOOTH_EVENT_GATT_SERVER_NOTIFICATION_STATE_CHANGED,
+					BLUETOOTH_ERROR_NONE, &notify_change,
+					user_info->cb, user_info->user_data);
+			}
+		}
+	} else if (g_strcmp0(method_name, "StopNotify") == 0) {
+		bt_user_info_t *user_info = NULL;
+		bt_gatt_char_notify_change_t notify_change = {0, };
+		BT_DBG("StopNotify");
+		user_info = _bt_get_user_data(BT_COMMON);
+		if (user_info != NULL) {
+			struct gatt_service_info *svc_info = NULL;
+			svc_info = __bt_gatt_find_gatt_service_from_char(object_path);
+			if (svc_info) {
+				notify_change.service_handle = g_strdup(svc_info->serv_path);
+				notify_change.att_handle = g_strdup(object_path);
+				notify_change.att_notify = FALSE;
+				_bt_common_event_cb(
+					BLUETOOTH_EVENT_GATT_SERVER_NOTIFICATION_STATE_CHANGED,
+					BLUETOOTH_ERROR_NONE, &notify_change,
+					user_info->cb, user_info->user_data);
+			}
+		}
+	}
+	g_dbus_method_invocation_return_value(invocation, NULL);
+}
+
+static void __bt_gatt_desc_method_call(GDBusConnection *connection,
 					const gchar *sender,
 					const gchar *object_path,
 					const gchar *interface_name,
@@ -377,73 +797,123 @@ static void __bt_gatt_prop_method_call(GDBusConnection *connection,
 
 	if (g_strcmp0(method_name, "ReadValue") == 0) {
 		gchar *addr = NULL;
-		gchar *attr_path = NULL;
 		guint8 req_id = 1;
 		guint16 offset = 0;
 		bt_gatt_read_req_t read_req = {0, };
 		bt_user_info_t *user_info = NULL;
 		struct gatt_req_info *req_info = NULL;
+		struct gatt_service_info *svc_info = NULL;
+		BT_DBG("ReadValue");
 
-		g_variant_get(parameters, "(&s&syq)", &addr, &attr_path, &req_id, &offset);
+		g_variant_get(parameters, "(&syq)", &addr, &req_id, &offset);
 
 		BT_DBG("Application path = %s", object_path);
-		BT_DBG("Attribute path = %s", attr_path);
 
 		BT_DBG("Remote Device address number = %s", addr);
 		BT_DBG("Request id = %d, Offset = %d", req_id, offset);
 
 		BT_DBG("Sender = %s", sender);
 
-		read_req.char_handle = g_strdup(attr_path);
+		read_req.att_handle = g_strdup(object_path);
 		read_req.address = g_strdup(addr);
 		read_req.req_id = req_id;
 		read_req.offset = offset;
-		user_info = _bt_get_user_data(BT_COMMON);
+		svc_info = __bt_gatt_find_gatt_service_from_desc(object_path);
+		if (svc_info != NULL) {
+			read_req.service_handle = g_strdup(svc_info->serv_path);
+			user_info = _bt_get_user_data(BT_COMMON);
 
-		/* Store requets information */
-		req_info = g_new0(struct gatt_req_info, 1);
-		req_info->attr_path = g_strdup(attr_path);
-		req_info->svc_path = g_strdup(object_path);
-		req_info->request_id= req_id;
-		req_info->offset = offset;
-		gatt_requests = g_slist_append(gatt_requests, req_info);
+			/* Store requets information */
+			req_info = g_new0(struct gatt_req_info, 1);
+			req_info->attr_path = g_strdup(object_path);
+			req_info->svc_path = g_strdup(read_req.service_handle);
+			req_info->request_id= req_id;
+			req_info->offset = offset;
+			req_info->context = invocation;
+			gatt_requests = g_slist_append(gatt_requests, req_info);
 
-		inner_builder = g_variant_builder_new(G_VARIANT_TYPE ("ay"));
+			if (user_info != NULL) {
+				struct gatt_char_info *char_info = NULL;
 
-		if (user_info != NULL) {
-			struct gatt_char_info *char_info;
-
-			read_req.service_handle = g_strdup(object_path);
-			_bt_common_event_cb(
-				BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED,
-				BLUETOOTH_ERROR_NONE, &read_req,
-				user_info->cb, user_info->user_data);
-
-			char_info = __bt_gatt_find_gatt_char_info(req_info->svc_path, req_info->attr_path);
-			if (char_info) {
-				for (i = req_info->offset; i < char_info->value_length; i++)
-					g_variant_builder_add(inner_builder, "y", char_info->char_value[i]);
+				_bt_common_event_cb(
+					BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED,
+					BLUETOOTH_ERROR_NONE, &read_req,
+					user_info->cb, user_info->user_data);
 			}
 		}
 
-		g_dbus_method_invocation_return_value(invocation,
-					g_variant_new("(ay)", inner_builder));
-		if (inner_builder)
-			g_variant_builder_unref(inner_builder);
-
-		if (read_req.char_handle)
-			g_free(read_req.char_handle);
+		if (read_req.att_handle)
+			g_free(read_req.att_handle);
 		if (read_req.address)
 			g_free(read_req.address);
+		if (read_req.service_handle)
+			g_free(read_req.service_handle);
 
-		gatt_requests = g_slist_remove(gatt_requests, req_info);
-		if (req_info->attr_path)
-			g_free(req_info->attr_path);
-		if (req_info->svc_path)
-			g_free(req_info->svc_path);
+		return;
+	} else if (g_strcmp0(method_name, "WriteValue") == 0) {
+		GVariant *var = NULL;
+		gchar *addr = NULL;
+		guint8 req_id = 0;
+		guint16 offset = 0;
+		bt_gatt_value_change_t value_change = {0, };
+		bt_user_info_t *user_info = NULL;
+		int len = 0;
+		struct gatt_service_info *svc_info = NULL;
+		struct gatt_req_info *req_info = NULL;
 
-		g_free(req_info);
+		BT_DBG("WriteValue");
+		BT_DBG("Application path = %s", object_path);
+		BT_DBG("Sender = %s", sender);
 
+		g_variant_get(parameters, "(&syq@ay)", &addr, &req_id, &offset, &var);
+
+		value_change.att_handle = g_strdup(object_path);
+		value_change.address = g_strdup(addr);
+		svc_info = __bt_gatt_find_gatt_service_from_desc(object_path);
+		if (svc_info == NULL) {
+			g_variant_unref(var);
+			g_dbus_method_invocation_return_value(invocation, NULL);
+			return;
+		}
+
+		value_change.service_handle = g_strdup(svc_info->serv_path);
+		value_change.offset = offset;
+		value_change.req_id = req_id;
+
+		len = g_variant_get_size(var);
+		if (len > 0) {
+			char *data;
+
+			value_change.att_value = (guint8 *)malloc(len);
+			if (!value_change.att_value) {
+				BT_ERR("att_value is NULL");
+				g_variant_unref(var);
+				g_dbus_method_invocation_return_value(invocation, NULL);
+				return;
+			}
+			data = (char *)g_variant_get_data(var);
+			memcpy(value_change.att_value, data, len);
+		}
+		g_variant_unref(var);
+
+		value_change.val_len = len;
+
+		/* Store requets information */
+		req_info = g_new0(struct gatt_req_info, 1);
+		req_info->attr_path = g_strdup(object_path);
+		req_info->svc_path = g_strdup(value_change.service_handle);
+		req_info->request_id= req_id;
+		req_info->offset = offset;
+		req_info->context = invocation;
+		gatt_requests = g_slist_append(gatt_requests, req_info);
+
+		user_info = _bt_get_user_data(BT_COMMON);
+		if (user_info != NULL) {
+			_bt_common_event_cb(
+				BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED,
+				BLUETOOTH_ERROR_NONE, &value_change,
+				user_info->cb, user_info->user_data);
+		}
 		return;
 	}
 	g_dbus_method_invocation_return_value(invocation, NULL);
@@ -479,123 +949,24 @@ gboolean __bt_gatt_emit_interface_removed(gchar *object_path, gchar *interface)
 	return ret;
 }
 
-static gboolean __bt_gatt_desc_set_property(GDBusConnection *connection,
-				const gchar *sender, const gchar *object_path,
-				const gchar *interface_name,
-				const gchar *property_name,
-				GVariant *value,
-				GError **err, gpointer user_data)
-{
-	BT_DBG("+");
-
-	return TRUE;
-}
-
-static gboolean __bt_gatt_char_set_property(GDBusConnection *connection,
-				const gchar *sender, const gchar *object_path,
-				const gchar *interface_name,
-				const gchar *property_name,
-				GVariant *value,
-				GError **err, gpointer user_data)
-{
-	BT_DBG("+");
-
-	if (g_strcmp0(property_name, "Value") == 0) {
-		GVariantIter *var = NULL;
-		bt_gatt_char_value_t char_val = {0, };
-		bt_user_info_t *user_info = NULL;
-		int len = 0, i;
-
-		g_variant_get(value, "ay", &var);
-		len = g_variant_get_size((GVariant *)var);
-
-		char_val.char_handle = (char *)object_path;
-		if (len > 0) {
-			char_val.char_value = (guint8 *)malloc(len);
-			if (!char_val.char_value)
-				return FALSE;
-		}
-		for (i = 0; i < len; i++)
-			g_variant_iter_loop(var, "y",  &char_val.char_value[i]);
-		char_val.val_len = len;
-		user_info = _bt_get_user_data(BT_COMMON);
-		if (user_info != NULL)
-			_bt_common_event_cb(
-				BLUETOOTH_EVENT_GATT_SERVER_CHARACTERISTIC_VALUE_CHANGED,
-				BLUETOOTH_ERROR_NONE, &char_val,
-				user_info->cb, user_info->user_data);
-
-		bluetooth_gatt_update_characteristic(object_path, (const char *)char_val.char_value,
-									char_val.val_len);
-
-		free(char_val.char_value);
-	}
-
-	return TRUE;
-}
-
-static GVariant *__bt_gatt_desc_get_property(GDBusConnection *connection,
-				const gchar *sender, const gchar *object_path,
-				const gchar *interface_name,
-				const gchar *property_name,
-				GError **error, gpointer user_data)
-{
-	BT_DBG("+");
-
-	return NULL;
-}
-
-static GVariant *__bt_gatt_char_get_property(GDBusConnection *connection,
-				const gchar *sender, const gchar *object_path,
-				const gchar *interface_name,
-				const gchar *property_name,
-				GError **error, gpointer user_data)
-{
-	BT_DBG("+");
-
-	return NULL;
-}
-
-static GVariant *__bt_gatt_serv_get_property(GDBusConnection *connection,
-				const gchar *sender, const gchar *object_path,
-				const gchar *interface_name,
-				const gchar *property_name,
-				GError **error, gpointer user_data)
-{
-	BT_DBG("+");
-
-	return NULL;
-}
-
 static const GDBusInterfaceVTable desc_interface_vtable = {
+	__bt_gatt_desc_method_call,
 	NULL,
-	__bt_gatt_desc_get_property,
-	__bt_gatt_desc_set_property
+	NULL,
 };
 
 static const GDBusInterfaceVTable char_interface_vtable = {
+	__bt_gatt_char_method_call,
 	NULL,
-	__bt_gatt_char_get_property,
-	__bt_gatt_char_set_property,
+	NULL,
 };
 
 static const GDBusInterfaceVTable serv_interface_vtable = {
+	__bt_gatt_serv_method_call,
 	NULL,
-	__bt_gatt_serv_get_property,
 	NULL,
 };
 
-static const GDBusInterfaceVTable manager_interface_vtable = {
-	__bt_gatt_manager_method_call,
-	NULL,
-	NULL
-};
-
-static const GDBusInterfaceVTable properties_interface_vtable = {
-	__bt_gatt_prop_method_call,
-	NULL,
-	NULL
-};
 
 static GDBusNodeInfo *__bt_gatt_create_method_node_info(
 				const gchar *introspection_data)
@@ -708,10 +1079,18 @@ static int char_info_cmp(gconstpointer a1, gconstpointer a2)
 	return g_strcmp0(attrib1->char_path, attrib2->char_path);
 }
 
-static void __bt_gatt_update_attribute_info(struct gatt_req_info *req_info,
+static int desc_info_cmp(gconstpointer a1, gconstpointer a2)
+{
+	const struct gatt_desc_info *attrib1 = a1;
+	const struct gatt_desc_info *attrib2 = a2;
+
+	return g_strcmp0(attrib1->desc_path, attrib2->desc_path);
+}
+
+static gboolean __bt_gatt_update_attribute_info(struct gatt_req_info *req_info,
 			char *value, int value_length)
 {
-	GSList *l1, *l2;
+	GSList *l1, *l2, *l3;
 	int found = 0;
 	for (l1 = gatt_services; l1 != NULL; l1 = l1->next) {
 		struct gatt_service_info *serv_info = l1->data;
@@ -721,20 +1100,34 @@ static void __bt_gatt_update_attribute_info(struct gatt_req_info *req_info,
 			for (l2 = serv_info->char_data; l2 != NULL; l2 = l2->next) {
 				struct gatt_char_info *char_info = l2->data;
 
-				if (char_info && g_strcmp0(char_info->char_path, req_info->attr_path)
-							== 0) {
-					memcpy(&char_info->char_value[req_info->offset], value, value_length);
-					serv_info->char_data = g_slist_insert_sorted (serv_info->char_data, char_info, char_info_cmp);
-					found = 1;
-					break;
+				if (char_info) {
+					if (g_strcmp0(char_info->char_path, req_info->attr_path) == 0) {
+						memcpy(&char_info->char_value[req_info->offset], value, value_length);
+						serv_info->char_data = g_slist_insert_sorted (serv_info->char_data, char_info, char_info_cmp);
+						found = 1;
+						break;
+					} else {
+						for (l3 = char_info->desc_data; l3 != NULL; l3 = l3->next) {
+							struct gatt_desc_info *desc_info = l3->data;
+
+							if (desc_info && g_strcmp0(desc_info->desc_path, req_info->attr_path)
+										== 0) {
+								memcpy(&desc_info->desc_value[req_info->offset], value, value_length);
+								char_info->desc_data = g_slist_insert_sorted (char_info->desc_data, desc_info, desc_info_cmp);
+								found = 1;
+								break;
+							}
+						}
+					}
 				}
 			}
 		}
-		if (found)
-			break;
+		if (found) {
+			return TRUE;;
+		}
 	}
+	return FALSE;
 }
-
 
 static GDBusProxy *__bt_gatt_gdbus_init_manager_proxy(const gchar *service,
 				const gchar *path, const gchar *interface)
@@ -777,45 +1170,6 @@ static GDBusProxy *__bt_gatt_gdbus_get_manager_proxy(const gchar *service,
 	return (manager_gproxy) ? manager_gproxy :
 			__bt_gatt_gdbus_init_manager_proxy(service,
 				path, interface);
-}
-
-static gboolean __bt_gatt_export_properties_method(const char *svc_path)
-{
-	guint prop_id;
-	GDBusNodeInfo *prop_info;
-	GError *error = NULL;
-	struct gatt_service_info *svc_info;
-
-	BT_DBG("svc_path %s", svc_path);
-	svc_info = __bt_gatt_find_gatt_service_info(svc_path);
-
-	if (!svc_info) {
-	    BT_ERR("Unable to find service info");
-		return FALSE;
-	}
-
-	/* Register ObjectManager interface */
-	prop_info = __bt_gatt_create_method_node_info(
-						properties_introspection_xml);
-
-	if (prop_info == NULL) {
-		BT_ERR("failed to get node info");
-		return FALSE;
-	}
-
-	prop_id = g_dbus_connection_register_object(g_conn, svc_path,
-						prop_info->interfaces[0],
-						&properties_interface_vtable,
-						NULL, NULL, &error);
-
-	if (prop_id == 0) {
-		BT_ERR("failed to register: %s", error->message);
-		g_error_free(error);
-		return FALSE;
-	}
-	svc_info->prop_id = prop_id;
-
-	return TRUE;
 }
 
 int bluetooth_gatt_convert_prop2string(
@@ -951,6 +1305,8 @@ void register_service_cb(GObject *object, GAsyncResult *res, gpointer user_data)
 	GError *error = NULL;
 	GVariant *result;
 
+	register_pending_cnt = 0;
+
 	result = g_dbus_proxy_call_finish(manager_gproxy, res, &error);
 
 	if (result == NULL) {
@@ -999,7 +1355,7 @@ static int __bt_gatt_unregister_service(const char *service_path)
 	GDBusProxy *proxy = NULL;
 
 	proxy = __bt_gatt_gdbus_get_manager_proxy("org.bluez",
-					"/org/bluez", GATT_MNGR_INTERFACE);
+					"/org/bluez/hci0", GATT_MNGR_INTERFACE);
 
 	if (proxy == NULL)
 		return BLUETOOTH_ERROR_INTERNAL;
@@ -1050,8 +1406,6 @@ static GDBusConnection *__bt_gatt_get_gdbus_connection(void)
 BT_EXPORT_API int bluetooth_gatt_init(void)
 {
 	GDBusConnection *conn;
-	GDBusNodeInfo *obj_info;
-	GError *error = NULL;
 
 	owner_id = g_bus_own_name(G_BUS_TYPE_SYSTEM,
 				BT_GATT_SERVICE_NAME,
@@ -1068,26 +1422,6 @@ BT_EXPORT_API int bluetooth_gatt_init(void)
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	/* Register ObjectManager interface */
-	obj_info = __bt_gatt_create_method_node_info(
-					manager_introspection_xml);
-
-	if (obj_info == NULL) {
-		BT_ERR("failed to get node info");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	manager_id = g_dbus_connection_register_object(g_conn, "/",
-						obj_info->interfaces[0],
-						&manager_interface_vtable,
-						NULL, NULL, &error);
-
-	if (manager_id == 0) {
-		BT_ERR("failed to register: %s", error->message);
-		g_error_free(error);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
 	return BLUETOOTH_ERROR_NONE;
 }
 
@@ -1101,10 +1435,6 @@ BT_EXPORT_API int bluetooth_gatt_deinit()
 		bluetooth_gatt_delete_services();
 
 		g_bus_unown_name(owner_id);
-
-		/* unregister the exported interface for object manager */
-		g_dbus_connection_unregister_object(g_conn,
-					manager_id);
 
 		BT_DBG("Gatt service deinitialized \n");
 
@@ -1125,7 +1455,9 @@ BT_EXPORT_API int bluetooth_gatt_add_service(const char *svc_uuid,
 	GDBusNodeInfo *node_info;
 	gchar *path = NULL;
 	GVariantBuilder *builder = NULL;
+	GVariantBuilder *builder1 = NULL;
 	GVariantBuilder *inner_builder = NULL;
+	gboolean svc_primary = TRUE;
 	struct gatt_service_info *serv_info = NULL;
 
 	node_info = __bt_gatt_create_method_node_info(
@@ -1159,6 +1491,7 @@ BT_EXPORT_API int bluetooth_gatt_add_service(const char *svc_uuid,
 	serv_info->serv_id = object_id;
 	serv_info->service_uuid = g_strdup(svc_uuid);
 	serv_info->is_svc_registered = FALSE;
+	serv_info->is_svc_primary = svc_primary;
 
 	gatt_services = g_slist_append(gatt_services, serv_info);
 
@@ -1168,6 +1501,14 @@ BT_EXPORT_API int bluetooth_gatt_add_service(const char *svc_uuid,
 
 	g_variant_builder_add(inner_builder, "{sv}",
 		"UUID", g_variant_new_string(svc_uuid));
+
+	g_variant_builder_add(inner_builder, "{sv}",
+		"Primary", g_variant_new_boolean(svc_primary));
+
+	builder1 = g_variant_builder_new(G_VARIANT_TYPE("ao"));
+
+	g_variant_builder_add(inner_builder, "{sv}", "Characteristics",
+				g_variant_new("ao", builder1));
 
 	g_variant_builder_add(builder, "{sa{sv}}",
 		GATT_SERV_INTERFACE, inner_builder);
@@ -1186,6 +1527,7 @@ BT_EXPORT_API int bluetooth_gatt_add_service(const char *svc_uuid,
 	g_free(path);
 	g_variant_builder_unref(inner_builder);
 	g_variant_builder_unref(builder);
+	g_variant_builder_unref(builder1);
 
 	return BLUETOOTH_ERROR_NONE;
 }
@@ -1205,6 +1547,7 @@ BT_EXPORT_API int bluetooth_gatt_add_new_characteristic(
 	struct gatt_service_info *serv_info = NULL;
 	struct gatt_char_info *char_info = NULL;
 	GVariantBuilder *builder2 = NULL;
+	GVariantBuilder *builder3 = NULL;
 	GVariant *flags_val = NULL;
 	int i = 0;
 	char *char_flags[NUMBER_OF_FLAGS];
@@ -1276,6 +1619,11 @@ BT_EXPORT_API int bluetooth_gatt_add_new_characteristic(
 	g_variant_builder_add(inner_builder, "{sv}", "Flags",
 				flags_val);
 
+	builder3 = g_variant_builder_new(G_VARIANT_TYPE("ao"));
+
+	g_variant_builder_add(inner_builder, "{sv}", "Descriptors",
+				g_variant_new("ao", builder3));
+
 	g_variant_builder_add(builder, "{sa{sv}}",
 				GATT_CHAR_INTERFACE,
 				inner_builder);
@@ -1296,6 +1644,7 @@ BT_EXPORT_API int bluetooth_gatt_add_new_characteristic(
 	g_variant_builder_unref(inner_builder);
 	g_variant_builder_unref(builder);
 	g_variant_builder_unref(builder2);
+	g_variant_builder_unref(builder3);
 
 	return BLUETOOTH_ERROR_NONE;
 }
@@ -1537,7 +1886,7 @@ int bluetooth_gatt_get_service(const char *svc_uuid)
 	gchar *uuid = NULL;
 
 	proxy = __bt_gatt_gdbus_get_manager_proxy("org.bluez",
-					"/org/bluez", GATT_MNGR_INTERFACE);
+					"/org/bluez/hci0", GATT_MNGR_INTERFACE);
 	if (proxy == NULL)
 		return BLUETOOTH_ERROR_INTERNAL;
 
@@ -1563,18 +1912,15 @@ BT_EXPORT_API int bluetooth_gatt_register_service(
 	GDBusProxy *proxy = NULL;
 	gchar *path = NULL;
 
+	register_pending_cnt++;
+
 	if (__bt_gatt_get_service_state(svc_path)) {
 		BT_DBG("service already registered \n");
 		return BLUETOOTH_ERROR_NONE;
 	}
 
-	if (!__bt_gatt_export_properties_method(svc_path)) {
-		BT_ERR("Failed to export Object manager method");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
 	proxy = __bt_gatt_gdbus_get_manager_proxy("org.bluez",
-					"/org/bluez", GATT_MNGR_INTERFACE);
+					"/org/bluez/hci0", GATT_MNGR_INTERFACE);
 	if (proxy == NULL)
 		return BLUETOOTH_ERROR_INTERNAL;
 
@@ -1629,9 +1975,9 @@ BT_EXPORT_API int bluetooth_gatt_delete_services(void)
 	return BLUETOOTH_ERROR_NONE;
 }
 
-BT_EXPORT_API int bluetooth_gatt_update_characteristic(
+BT_EXPORT_API int bluetooth_gatt_notify_characteristics_value_change(
 			const char *char_path, const char* char_value,
-			int value_length)
+			int value_length, bluetooth_device_address_t *unicast_address)
 {
 	GVariantBuilder *outer_builder;
 	GVariantBuilder *inner_builder;
@@ -1643,6 +1989,7 @@ BT_EXPORT_API int bluetooth_gatt_update_characteristic(
 	int i = 0;
 	gchar **line_argv = NULL;
 	gchar *serv_path = NULL;
+	char addr[20] = { 0 };
 
 	line_argv = g_strsplit_set(char_path, "/", 0);
 	serv_path = g_strdup_printf("/%s", line_argv[1]);
@@ -1667,6 +2014,14 @@ BT_EXPORT_API int bluetooth_gatt_update_characteristic(
 	g_variant_builder_add(outer_builder, "{sv}", "Value",
 					update_value);
 
+	if (unicast_address) {
+		_bt_convert_addr_type_to_string(addr,
+					(unsigned char *)unicast_address->addr);
+	}
+	g_variant_builder_add(outer_builder, "{sv}", "Unicast",
+				g_variant_new("s", addr));
+
+
 	BT_DBG("Updating characteristic value \n");
 	ret = g_dbus_connection_emit_signal(g_conn, NULL,
 					char_path,
@@ -1685,6 +2040,22 @@ BT_EXPORT_API int bluetooth_gatt_update_characteristic(
 			g_clear_error(&error);
 		}
 		err = BLUETOOTH_ERROR_INTERNAL;
+	} else {
+		struct gatt_char_info *char_info = NULL;
+
+		char_info = __bt_gatt_find_gatt_char_info(serv_path, char_path);
+		if (char_info == NULL) {
+			return BLUETOOTH_ERROR_INVALID_DATA;
+		}
+
+		char_info->value_length = value_length;
+
+		char_info->char_value = (char *)realloc(char_info->char_value, value_length);
+		if (char_info->char_value) {
+			for (i = 0; i < value_length; i++) {
+				char_info->char_value[i] = char_value[i];
+			}
+		}
 	}
 
 	g_strfreev(line_argv);
@@ -1771,17 +2142,57 @@ BT_EXPORT_API int bluetooth_gatt_unregister_service(const char *svc_path)
 	return err;
 }
 
-BT_EXPORT_API int bluetooth_gatt_send_response(int request_id,
-						int offset, char *value, int value_length)
+BT_EXPORT_API int bluetooth_gatt_send_response(int request_id, guint req_type,
+					int resp_state, int offset, char *value, int value_length)
 {
 	struct gatt_req_info *req_info = NULL;
 
 	req_info = __bt_gatt_find_request_info(request_id);
 
 	if (req_info) {
-		__bt_gatt_update_attribute_info(req_info, value, value_length);
-	} else
+		if (resp_state != BLUETOOTH_ERROR_NONE) {
+
+			GQuark quark = g_quark_from_string("gatt-server");
+			GError *err = g_error_new(quark, 0, "Application Error");
+			g_dbus_method_invocation_return_gerror(req_info->context, err);
+			g_error_free(err);
+
+			gatt_requests = g_slist_remove(gatt_requests, req_info);
+
+			req_info->context = NULL;
+			if (req_info->attr_path)
+				g_free(req_info->attr_path);
+			if (req_info->svc_path)
+				g_free(req_info->svc_path);
+			g_free(req_info);
+
+			return BLUETOOTH_ERROR_NONE;
+		}
+		if (req_type == BLUETOOTH_GATT_ATT_REQUEST_TYPE_READ) {
+			int i;
+			GVariantBuilder *inner_builder = NULL;
+			inner_builder = g_variant_builder_new(G_VARIANT_TYPE ("ay"));
+			if (value_length > 0 && value != NULL) {
+				for (i = 0; i < value_length; i++)
+					g_variant_builder_add(inner_builder, "y", value[i]);
+			}
+			g_dbus_method_invocation_return_value(req_info->context,
+						g_variant_new("(ay)", inner_builder));
+			g_variant_builder_unref(inner_builder);
+		} else {
+			g_dbus_method_invocation_return_value(req_info->context, NULL);
+		}
+		gatt_requests = g_slist_remove(gatt_requests, req_info);
+
+		req_info->context = NULL;
+		if (req_info->attr_path)
+			g_free(req_info->attr_path);
+		if (req_info->svc_path)
+			g_free(req_info->svc_path);
+		g_free(req_info);
+	} else {
 		return BLUETOOTH_ERROR_INTERNAL;
+	}
 
 	return BLUETOOTH_ERROR_NONE;
 }

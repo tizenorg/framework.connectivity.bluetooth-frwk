@@ -4,6 +4,8 @@ ADD_SUBDIRECTORY(bt-api)
 
 ADD_SUBDIRECTORY(bt-service)
 
+ADD_SUBDIRECTORY(bt-httpproxy)
+
 ADD_SUBDIRECTORY(bt-core)
 
 ADD_SUBDIRECTORY(test)

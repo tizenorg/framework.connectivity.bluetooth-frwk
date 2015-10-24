@@ -27,8 +27,6 @@
 
 #include <glib.h>
 #include <sys/types.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
 
 #include "bluetooth-api.h"
 #include "bluetooth-media-control.h"
@@ -38,6 +36,20 @@ extern "C" {
 #endif
 
 #define BT_MEDIA_OBJECT_PATH "/Musicplayer"
+
+#define BT_AVRCP_ERROR (__bt_avrcp_error_quark())
+
+#define BT_ERROR_INTERNAL "InternalError"
+#define BT_ERROR_INVALID_PARAM "InvalidParameters"
+#define BT_ERROR_INVALID_INTERFACE "InvalidInterface"
+
+typedef enum {
+	BT_AVRCP_ERROR_NONE,
+	BT_AVRCP_ERROR_INTERNAL,
+	BT_AVRCP_ERROR_INVALID_PARAM,
+	BT_AVRCP_ERROR_NOT_SUPPORTED,
+	BT_AVRCP_ERROR_INVALID_INTERFACE
+} bt_avrcp_error_t;
 
 int _bt_register_media_player(void);
 

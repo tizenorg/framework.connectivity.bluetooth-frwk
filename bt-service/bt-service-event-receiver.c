@@ -21,15 +21,11 @@
  *
  */
 
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus-glib-lowlevel.h>
-#include <dbus/dbus.h>
 #include <glib.h>
 #include <string.h>
 #include <dlog.h>
 #include <vconf.h>
 #include <vconf-internal-bt-keys.h>
-#include <journal/device.h>
 
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
@@ -51,11 +47,12 @@
 
 #include "bt-service-opp-client.h"
 
-static DBusGConnection *manager_conn;
-static DBusGConnection *obexd_conn;
-static GList *p_cache_list = NULL;
-static DBusGConnection *opc_obexd_conn = NULL;
+#define DBUS_TIMEOUT 20 * 1000 /* 20 Sec */
+static GDBusConnection *manager_conn;
+static GDBusConnection *obexd_conn;
+static GDBusConnection *opc_obexd_conn;
 
+static GList *p_cache_list = NULL;
 
 static guint event_id;
 guint nap_connected_device_count = 0;
@@ -80,14 +77,14 @@ typedef enum {
 	OBEX_MAS = (1 << 8),
 } bluetooth_obex_connection_type_t;
 
-void _bt_handle_property_changed_event(DBusMessage *msg);
-void _bt_opc_property_changed_event(DBusMessage *msg);
-int _bt_register_service_event(DBusGConnection *g_conn, int event_type);
-void _bt_unregister_service_event(DBusGConnection *g_conn, int event_type);
+void _bt_handle_property_changed_event(GVariant *msg, const char *object_path);
+void _bt_opc_property_changed_event(GVariant *msg, char *path);
+int _bt_register_service_event(GDBusConnection *g_conn, int event_type);
+void _bt_unregister_service_event(GDBusConnection *g_conn, int event_type);
 void _bt_opp_client_event_deinit(void);
-void _bt_handle_network_client_event(DBusMessageIter *msg_iter,
+void _bt_handle_network_client_event(GVariant *msg_iter,
 				const char *path);
-void __bt_gatt_char_property_changed_event(DBusMessageIter *msg_iter,
+void __bt_gatt_char_property_changed_event(GVariant *msg_iter,
 				const char *path);
 
 static void __bt_free_bt_le_adv_info_t(bt_le_adv_info_t *adv_info)
@@ -141,298 +138,136 @@ static void __bt_del_adv_ind_info(char *addr)
 static void __bt_free_cache_info(bt_cache_info_t *cache_info)
 {
 	ret_if(cache_info == NULL);
-
 	_bt_free_device_info(cache_info->dev_info);
 	g_free(cache_info);
 }
 
-static gboolean __bt_parse_device_properties(DBusMessageIter *item_iter,
+static gboolean __bt_parse_device_properties(GVariant *item,
 						bt_remote_dev_info_t *dev_info)
 {
-	BT_DBG("+");
-	DBusMessageIter value_iter;
-	char *value;
-
-	dbus_message_iter_recurse(item_iter, &value_iter);
-
-	if (dbus_message_iter_get_arg_type(&value_iter) != DBUS_TYPE_DICT_ENTRY) {
-		BT_DBG("No entry");
+	GVariantIter iter;
+	gchar *key;
+	GVariant *val;
+	gsize len = 0;
+	if (item == NULL)
 		return FALSE;
-	}
 
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-						DBUS_TYPE_DICT_ENTRY) {
-		char *key;
-		DBusMessageIter dict_entry;
-		DBusMessageIter iter_dict_val;
+	g_variant_iter_init(&iter, item);
+	while (g_variant_iter_loop(&iter, "{sv}", &key, &val)) {
+		if (strcasecmp(key, "Address") == 0)  {
+			dev_info->address = g_variant_dup_string(val, &len);
+		} else if (strcasecmp(key, "Class") == 0) {
+			dev_info->class = g_variant_get_uint32(val);
+		} else if (strcasecmp(key, "name") == 0) {
+			if (dev_info->name == NULL)
+				dev_info->name = g_variant_dup_string(val, &len);
+		} else if (strcasecmp(key, "Connected") == 0) {
+			dev_info->connected = g_variant_get_uint32(val);
+		} else if (strcasecmp(key, "paired") == 0) {
+			dev_info->paired = g_variant_get_boolean(val);
+		} else if (strcasecmp(key, "Trusted") == 0) {
+			dev_info->trust = g_variant_get_boolean(val);
+		} else if (strcasecmp(key, "RSSI") == 0) {
+			dev_info->rssi = g_variant_get_int16(val);
+		} else if (strcasecmp(key, "LastAddrType") == 0) {
+			dev_info->addr_type = g_variant_get_byte(val);
+		} else if (strcasecmp(key, "UUIDs") == 0) {
+			char **uuid_value;
+			gsize size = 0;
+			int i =0;
+			size = g_variant_get_size(val);
 
-		dbus_message_iter_recurse(&value_iter, &dict_entry);
+			if (size > 0) {
+				uuid_value = (char **)g_variant_get_strv(val, &size);
+				if (dev_info->uuids == NULL)
+					dev_info->uuids = g_malloc0(sizeof(char *) * size);
 
-		dbus_message_iter_get_basic(&dict_entry, &key);
-
-		if (key == NULL) {
-			dbus_message_iter_next(&value_iter);
-			continue;
-		}
-
-		if (!dbus_message_iter_next(&dict_entry)) {
-			dbus_message_iter_next(&value_iter);
-			continue;
-		}
-		dbus_message_iter_recurse(&dict_entry, &iter_dict_val);
-
-		if (dev_info) {
-			if (strcasecmp(key, "Address") == 0) {
-				const char *address = NULL;
-				dbus_message_iter_get_basic(&iter_dict_val, &address);
-				dev_info->address = g_strdup(address);
-			} else if (strcasecmp(key, "Class") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val, &dev_info->class);
-			} else if (strcasecmp(key, "name") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val, &value);
-				if (dev_info->name == NULL)
-					dev_info->name = g_strdup(value);
-			} else if (strcasecmp(key, "Connected") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-						&dev_info->connected);
-			} else if (strcasecmp(key, "paired") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-						&dev_info->paired);
-			} else if (strcasecmp(key, "Trusted") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-						&dev_info->trust);
-			} else if (strcasecmp(key, "RSSI") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-						&dev_info->rssi);
-			} else if (strcasecmp(key, "LastAddrType") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-						&dev_info->addr_type);
-			} else if (strcasecmp(key, "UUIDs") == 0) {
-				DBusMessageIter uuid_iter;
-				DBusMessageIter tmp_iter;
-				int i = 0;
-
-				dbus_message_iter_recurse(&iter_dict_val, &uuid_iter);
-
-				tmp_iter = uuid_iter;
-
-				/* Store the uuid count */
-				while (dbus_message_iter_get_arg_type(&tmp_iter) != DBUS_TYPE_INVALID) {
-					dbus_message_iter_get_basic(&tmp_iter,
-							&value);
-
+				for (i = 0; uuid_value[i] != NULL; i++) {
 					dev_info->uuid_count++;
-					if (!dbus_message_iter_next(&tmp_iter))
-						break;
+					dev_info->uuids[i] = g_strdup(uuid_value[i]);
 				}
-
-				/* Store the uuids */
-				if (dev_info->uuid_count > 0) {
-					dev_info->uuids = g_new0(char *,
-							dev_info->uuid_count + 1);
-				} else {
-					dbus_message_iter_next(&value_iter);
-					continue;
-				}
-
-				while (dbus_message_iter_get_arg_type(&uuid_iter) != DBUS_TYPE_INVALID) {
-					dbus_message_iter_get_basic(&uuid_iter,
-							&value);
-					dev_info->uuids[i] = g_strdup(value);
-					i++;
-					if (!dbus_message_iter_next(&uuid_iter)) {
-						break;
-					}
-				}
-			} else if (strcasecmp(key, "ManufacturerDataLen") == 0) {
-				dbus_message_iter_get_basic(&iter_dict_val,
-									&dev_info->manufacturer_data_len);
-
-				if (dev_info->manufacturer_data_len > BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX) {
-					BT_ERR("manufacturer_data_len is too long(len = %d)", dev_info->manufacturer_data_len);
-					dev_info->manufacturer_data_len = BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX;
-				}
-
-				if (dev_info->manufacturer_data_len == 0)
-					dev_info->manufacturer_data = g_strdup("");
-			} else if (strcasecmp(key, "ManufacturerData") == 0) {
-				DBusMessageIter manufacturer_iter;
-				int i = 0;
-				int len = 0;
-				char *manufacturer_data = NULL;
-				char byte = 0;
-				DBusMessageIter count_iter;
-				dbus_message_iter_recurse(&iter_dict_val, &manufacturer_iter);
-				dbus_message_iter_recurse(&iter_dict_val, &count_iter);
-
-				while (dbus_message_iter_get_arg_type(&count_iter) == DBUS_TYPE_BYTE) {
-					len++;
-					dbus_message_iter_next(&count_iter);
-				}
-
-				dev_info->manufacturer_data = g_malloc0(len);
-				manufacturer_data = dev_info->manufacturer_data;
-
-				while (dbus_message_iter_get_arg_type(&manufacturer_iter) == DBUS_TYPE_BYTE) {
-					dbus_message_iter_get_basic(&manufacturer_iter, &byte);
-					manufacturer_data[i] = byte;
-					i++;
-					dbus_message_iter_next(&manufacturer_iter);
-				}
+				g_free(uuid_value);
 			}
-		}
+		} else if (strcasecmp(key, "ManufacturerDataLen") == 0) {
+			g_variant_get(val, "(i)", &dev_info->manufacturer_data_len);
+			if (dev_info->manufacturer_data_len > BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX) {
+				BT_ERR("manufacturer_data_len is too long(len = %d)", dev_info->manufacturer_data_len);
+				dev_info->manufacturer_data_len = BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX;
+			}
 
-		dbus_message_iter_next(&value_iter);
+			if (dev_info->manufacturer_data_len == 0)
+				dev_info->manufacturer_data = g_strdup("");
+		} else if (strcasecmp(key, "ManufacturerData") == 0) {
+			int len = 0;
+			GVariant *manufacturer_var;
+			g_variant_get(val, "@ay", &manufacturer_var);
+			len = g_variant_get_size(manufacturer_var);
+			if (len > 0) {
+				char *manufacturer_data = (char *)g_variant_get_data(manufacturer_var);
+				dev_info->manufacturer_data = g_malloc0(len);
+				if (dev_info->manufacturer_data)
+					memcpy(dev_info->manufacturer_data, manufacturer_data,
+						len);
+			}
+			g_variant_unref(manufacturer_var);
+		}
 	}
 
 	BT_DBG("-");
 	return TRUE;
 }
 
-static gboolean __bt_parse_interface(DBusMessage *msg,
+static gboolean __bt_parse_interface(GVariant *msg,
 					bt_remote_dev_info_t *dev_info)
 {
-	BT_DBG("+");
+	char *path = NULL;
+	GVariant *optional_param;
+	GVariantIter iter;
+	GVariant *child;
+	char *interface_name= NULL;
+	GVariant *inner_iter = NULL;
+	g_variant_get(msg, "(&o@a{sa{sv}})",
+					&path, &optional_param);
+	g_variant_iter_init(&iter, optional_param);
 
-	DBusMessageIter msg_iter;
-	DBusMessageIter value_iter;
-	char *object_path = NULL;
-
-	retv_if(dbus_message_iter_init(msg, &msg_iter) == FALSE, FALSE);
-
-	dbus_message_iter_get_basic(&msg_iter, &object_path);
-	retv_if(object_path == NULL, FALSE);
-
-	/* object array (oa) */
-	retv_if(dbus_message_iter_next(&msg_iter) == FALSE, FALSE);
-	retv_if(dbus_message_iter_get_arg_type(&msg_iter) !=
-				DBUS_TYPE_ARRAY, FALSE);
-
-	dbus_message_iter_recurse(&msg_iter, &value_iter);
-
-	/* string array (sa) */
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-					DBUS_TYPE_DICT_ENTRY) {
-		char *interface_name = NULL;
-		DBusMessageIter interface_iter;
-
-		dbus_message_iter_recurse(&value_iter, &interface_iter);
-
-		retv_if(dbus_message_iter_get_arg_type(&interface_iter) !=
-			DBUS_TYPE_STRING, FALSE);
-
-		dbus_message_iter_get_basic(&interface_iter, &interface_name);
-
-		retv_if(dbus_message_iter_next(&interface_iter) == FALSE, FALSE);
-
-		retv_if(dbus_message_iter_get_arg_type(&interface_iter) !=
-			DBUS_TYPE_ARRAY, FALSE);
-
-		BT_DBG("interface: %s", interface_name);
-
-		if (g_strcmp0(interface_name, "org.bluez.Device1") == 0) {
-			BT_DBG("Found a device: %s", object_path);
-
-			if (__bt_parse_device_properties(&interface_iter,
-					dev_info) == FALSE) {
+	while ((child = g_variant_iter_next_value(&iter))) {
+		g_variant_get(child,"{&s@a{sv}}", &interface_name, &inner_iter);
+		if (g_strcmp0(interface_name, BT_DEVICE_INTERFACE) == 0) {
+			BT_DBG("Found a device: %s", path);
+			if (__bt_parse_device_properties(inner_iter,
+				dev_info) == FALSE) {
+				g_variant_unref(inner_iter);
+				g_variant_unref(child);
+				g_variant_unref(optional_param);
 				BT_ERR("Fail to parse the properies");
 				return FALSE;
 			} else {
+				g_variant_unref(inner_iter);
+				g_variant_unref(child);
+				g_variant_unref(optional_param);
 				return TRUE;
 			}
 		}
-
-		dbus_message_iter_next(&value_iter);
+		g_variant_unref(inner_iter);
+	g_variant_unref(child);
 	}
 
-	BT_DBG("-");
+	g_variant_unref(optional_param);
 
 	return FALSE;
 }
 
-static int __bt_get_owner_info(DBusMessage *msg, char **name,
+static int __bt_get_owner_info(GVariant *msg, char **name,
 				char **previous, char **current)
 {
-	DBusMessageIter item_iter;
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, name);
-
-	retv_if(*name == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_message_iter_next(&item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, previous);
-
-	retv_if(*previous == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	dbus_message_iter_next(&item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, current);
-
-	retv_if(*current == NULL, BLUETOOTH_ERROR_INTERNAL);
-
+	g_variant_get(msg, "(sss)", name, previous, current);
 	return BLUETOOTH_ERROR_NONE;
 }
 
-static int __bt_get_agent_signal_info(DBusMessage *msg, char **address,
+static int __bt_get_agent_signal_info(GVariant *msg, char **address,
 				char **name, char **uuid)
 {
-	BT_DBG("+");
-
-	DBusMessageIter item_iter;
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, address);
-
-	dbus_message_iter_next(&item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, name);
-
-	dbus_message_iter_next(&item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, uuid);
-
-	BT_DBG("-");
-
+	g_variant_get(msg, "(sss)", address, name, uuid);
 	return BLUETOOTH_ERROR_NONE;
 }
 
@@ -458,7 +293,7 @@ gboolean _bt_discovery_finished_cb(gpointer user_data)
 {
 	int result = BLUETOOTH_ERROR_NONE;
 	event_id = 0;
-
+	GVariant *param = NULL;
 	if (_bt_get_discovering_property(DISCOVERY_ROLE_BREDR) == FALSE) {
 		if (_bt_get_cancel_by_user() == TRUE) {
 			result = BLUETOOTH_ERROR_CANCEL_BY_USER;
@@ -466,10 +301,10 @@ gboolean _bt_discovery_finished_cb(gpointer user_data)
 
 		_bt_set_cancel_by_user(FALSE);
 		_bt_set_discovery_status(FALSE);
+		param = g_variant_new("(i)", result);
 		_bt_send_event(BT_ADAPTER_EVENT,
 			BLUETOOTH_EVENT_DISCOVERY_FINISHED,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_INVALID);
+			param);
 	}
 
 	return FALSE;
@@ -479,19 +314,19 @@ static gboolean __bt_le_discovery_finished_cb(gpointer user_data)
 {
 	int result = BLUETOOTH_ERROR_NONE;
 	event_id = 0;
-
+	GVariant *param = NULL;
 	if (_bt_get_discovering_property(DISCOVERY_ROLE_LE) == FALSE) {
 		if (_bt_get_cancel_by_user() == TRUE) {
 			result = BLUETOOTH_ERROR_CANCEL_BY_USER;
 		}
 
 		_bt_set_cancel_by_user(FALSE);
-		_bt_disable_all_scanner_status();
+                _bt_disable_all_scanner_status();
 		_bt_set_le_scan_status(FALSE);
+		param = g_variant_new("(i)", result);
 		_bt_send_event(BT_LE_ADAPTER_EVENT,
 			BLUETOOTH_EVENT_LE_DISCOVERY_FINISHED,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_INVALID);
+			param);
 	}
 
 	return FALSE;
@@ -538,7 +373,7 @@ static void __bt_device_remote_connected_properties(
 {
 	int result = BLUETOOTH_ERROR_NONE;
 	int i;
-
+	GVariant *param = NULL;
 	BT_DBG("+");
 
 	if (remote_dev_info->uuid_count > 0 ) {
@@ -550,11 +385,10 @@ static void __bt_device_remote_connected_properties(
 				event = (connected == TRUE) ?
 					BLUETOOTH_HID_CONNECTED :
 					BLUETOOTH_HID_DISCONNECTED;
-
+				param = g_variant_new("(is)", result,
+							address);
 				_bt_send_event(BT_HID_EVENT, event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
+					param);
 				break;
 			}
 		}
@@ -563,18 +397,16 @@ static void __bt_device_remote_connected_properties(
 	BT_DBG("-");
 }
 
-void _bt_handle_adapter_event(DBusMessage *msg)
+void _bt_handle_adapter_event(GVariant *msg, const char *member)
 {
 	BT_DBG("+");
 
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	const char *member = dbus_message_get_member(msg);
-
+	GVariant *param = NULL;
 	ret_if(member == NULL);
 
 	if (strcasecmp(member, "DeviceCreated") == 0) {
-		const char *object_path = NULL;
+		char *object_path = NULL;
 		char *address;
 		bt_remote_dev_info_t *remote_dev_info;
 
@@ -583,11 +415,8 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 		/* Bonding from remote device */
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &object_path);
-		dbus_message_iter_next(&item_iter);
-
-		_bt_convert_device_path_to_address(object_path, address);
+		g_variant_get(msg, "(&o)", &object_path);
+		_bt_convert_device_path_to_address((const char*)object_path, address);
 
 		remote_dev_info = _bt_get_remote_device_info(address);
 		if (remote_dev_info == NULL) {
@@ -598,7 +427,7 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 		_bt_free_device_info(remote_dev_info);
 		g_free(address);
 	} else if (strcasecmp(member, "InterfacesRemoved") == 0) {
-		const char *object_path = NULL;
+		char *object_path = NULL;
 		char *address;
 		bt_cache_info_t *cache_info;
 		bt_remote_dev_info_t *dev_info;
@@ -606,16 +435,13 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 
 		/* Bonding from remote device */
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+		g_variant_get(msg, "(&o)", &object_path);
 
 		/* Fix : NULL_RETURNS */
 		if (address == NULL)
 			return;
 
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &object_path);
-		dbus_message_iter_next(&item_iter);
-
-		_bt_convert_device_path_to_address(object_path, address);
+		_bt_convert_device_path_to_address((const char *)object_path, address);
 
 		node = g_list_first(p_cache_list);
 
@@ -637,7 +463,6 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			}
 			node = g_list_next(node);
 		}
-
 		g_free(address);
 	} else if (strcasecmp(member, "AdvertisingEnabled") == 0) {
 		BT_DBG("Advertising Enabled");
@@ -647,11 +472,7 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 		int adv_handle;
 		gboolean status = FALSE;
 
-		dbus_message_iter_init(msg, &item_iter);
-
-		dbus_message_iter_get_basic(&item_iter, &slot_id);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &status);
+		g_variant_get(msg, "(ib)", &slot_id, &status);
 
 		BT_DBG("Advertising Enabled : slot_id [%d]  status [%d]", slot_id, status);
 
@@ -665,12 +486,11 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 			event = BLUETOOTH_EVENT_ADVERTISING_STARTED;
 		else
 			event = BLUETOOTH_EVENT_ADVERTISING_STOPPED;
-
+		param = g_variant_new("(ii)", result,
+					adv_handle);
 		_bt_send_event_to_dest(sender, BT_ADAPTER_EVENT,
 				event,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_INT32, &adv_handle,
-				DBUS_TYPE_INVALID);
+				param);
 
 		if (event == BLUETOOTH_EVENT_ADVERTISING_STOPPED)
 			__bt_unregister_adv_slot_owner(slot_id);
@@ -679,72 +499,46 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 		gboolean status = FALSE;
 		char *address = NULL;
 		int link_type;
-
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &address);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &link_type);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &status);
+		g_variant_get(msg,"(sib)", &address, &link_type, &status);
 
 		BT_DBG("RSSI Enabled [%s %d]", address, status);
+		param = g_variant_new("(isib)", result,
+					address, link_type, status);
 		_bt_send_event(BT_DEVICE_EVENT,
 				BLUETOOTH_EVENT_RSSI_ENABLED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INT32, &link_type,
-				DBUS_TYPE_BOOLEAN, &status,
-				DBUS_TYPE_INVALID);
+				param);
+		g_free(address);
 	} else if (strcasecmp(member, "RssiAlert") == 0) {
 		BT_DBG("RSSI Alert");
 		int alert_type;
 		int rssi_dbm;
 		int link_type;
 		char *address = NULL;
-
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &address);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &link_type);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &alert_type);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &rssi_dbm);
+		g_variant_get(msg,"(siii)", &address, &link_type, &alert_type, &rssi_dbm);
 
 		BT_DBG("RSSI Alert: [Address %s LinkType %d] [Type %d DBM %d]",
 				address, alert_type, rssi_dbm);
-
+		param = g_variant_new("(isiii)", result,
+					address, link_type, alert_type, rssi_dbm);
 		_bt_send_event(BT_DEVICE_EVENT,
 				BLUETOOTH_EVENT_RSSI_ALERT,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INT32, &link_type,
-				DBUS_TYPE_INT32, &alert_type,
-				DBUS_TYPE_INT32, &rssi_dbm,
-				DBUS_TYPE_INVALID);
+				param);
+		g_free(address);
 	} else if (strcasecmp(member, "RawRssi") == 0) {
 		BT_DBG("RSSI Raw");
 		int rssi_dbm;
 		int link_type;
 		char *address = NULL;
-
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &address);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &link_type);
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_get_basic(&item_iter, &rssi_dbm);
+		g_variant_get(msg,"(sii)", &address, &link_type, &rssi_dbm);
 
 		BT_DBG("Raw RSSI: [Address %s] [Link Type %d][RSSI DBM %d]",
 				address, link_type, rssi_dbm);
-
+		param = g_variant_new("(isii)", result,
+					address, link_type, rssi_dbm);
 		_bt_send_event(BT_DEVICE_EVENT,
 				BLUETOOTH_EVENT_RAW_RSSI,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INT32, &link_type,
-				DBUS_TYPE_INT32, &rssi_dbm,
-				DBUS_TYPE_INVALID);
+				param);
+		g_free(address);
 	} else if (strcasecmp(member, BT_HARDWARE_ERROR) == 0) {
 		BT_ERR_C("Hardware error received from BLUEZ");
 		_bt_recover_adapter();
@@ -755,276 +549,256 @@ void _bt_handle_adapter_event(DBusMessage *msg)
 	BT_DBG("-");
 }
 
-static void __bt_adapter_property_changed_event(DBusMessageIter *msg_iter, const char *path)
+static void __bt_adapter_property_changed_event(GVariant *msg, const char *path)
 {
-	DBusGProxy *adapter_proxy;
+	GDBusProxy *adapter_proxy;
 	int mode = 0;
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
-	GValue timeout = { 0 };
-	const char *property = NULL;
+	GVariantIter value_iter;
+	GVariant *val = NULL;
+	GError *err = NULL;
+	char *property = NULL;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((g_variant_iter_loop (&value_iter,"{sv}", &property, &val))) {
+		BT_INFO("Property %s", property);
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
+		if (strcasecmp(property, "Discovering") == 0) {
+			gboolean discovering = FALSE;
+			g_variant_get(val, "b", &discovering);
+			/* Send event to application */
+			BT_DBG("Discovering %d", discovering);
+			if (discovering == TRUE) {
+				_bt_set_discovery_status(TRUE);
+				param = g_variant_new("(i)", result);
+				_bt_send_event(BT_ADAPTER_EVENT,
+					BLUETOOTH_EVENT_DISCOVERY_STARTED,
+					param);
+			} else {
+				ret_if(event_id > 0);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
-
-	dbus_message_iter_get_basic(&dict_iter, &property);
-	ret_if(property == NULL);
-
-	ret_if(!dbus_message_iter_next(&dict_iter));
-
-	if (strcasecmp(property, "Discovering") == 0) {
-		gboolean discovering = FALSE;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &discovering);
-
-		/* Send event to application */
-		if (discovering == TRUE) {
-			_bt_set_discovery_status(TRUE);
-			_bt_send_event(BT_ADAPTER_EVENT,
-				BLUETOOTH_EVENT_DISCOVERY_STARTED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_INVALID);
-		} else {
-			ret_if(event_id > 0);
-
-			adapter_proxy = _bt_get_adapter_proxy();
-			ret_if(adapter_proxy == NULL);
-
-			/* Need to stop searching */
-			dbus_g_proxy_call(adapter_proxy,
-						"StopDiscovery",
-						NULL,
-						G_TYPE_INVALID,
-						G_TYPE_INVALID);
-
-			event_id = g_timeout_add(BT_DISCOVERY_FINISHED_DELAY,
-				      (GSourceFunc)_bt_discovery_finished_cb, NULL);
-		}
-	} else if (strcasecmp(property, "LEDiscovering") == 0) {
-		gboolean le_discovering = FALSE;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &le_discovering);
-
-		/* Send event to application */
-		if (le_discovering == TRUE) {
-			_bt_set_le_scan_status(TRUE);
-			_bt_send_event(BT_LE_ADAPTER_EVENT,
-				BLUETOOTH_EVENT_LE_DISCOVERY_STARTED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_INVALID);
-		} else {
-			ret_if(event_id > 0);
-
-			adapter_proxy = _bt_get_adapter_proxy();
-			ret_if(adapter_proxy == NULL);
-
-			/* Need to stop searching */
-			dbus_g_proxy_call(adapter_proxy,
-						"StopLEDiscovery",
-						NULL,
-						G_TYPE_INVALID,
-						G_TYPE_INVALID);
-
-			event_id = g_timeout_add(BT_DISCOVERY_FINISHED_DELAY,
-				      (GSourceFunc)__bt_le_discovery_finished_cb, NULL);
-		}
-	} else if (strcasecmp(property, "Name") == 0) {
-		char *name = NULL;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &name);
-
-		/* Send event to application */
-		_bt_send_event(BT_ADAPTER_EVENT,
-				BLUETOOTH_EVENT_LOCAL_NAME_CHANGED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &name,
-				DBUS_TYPE_INVALID);
-	} else if (strcasecmp(property, "Alias") == 0) {
-		char *alias = NULL;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &alias);
-
-		/* Send event to application */
-		_bt_send_event(BT_ADAPTER_EVENT,
-				BLUETOOTH_EVENT_LOCAL_NAME_CHANGED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &alias,
-				DBUS_TYPE_INVALID);
-	} else if (strcasecmp(property, "Discoverable") == 0) {
-		gboolean discoverable = FALSE;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &discoverable);
-
-		if (discoverable == FALSE) {
-			if (_bt_get_discoverable_timeout_property() > 0) {
-				g_value_init(&timeout, G_TYPE_UINT);
-				g_value_set_uint(&timeout, 0);
-
-				adapter_proxy = _bt_get_adapter_properties_proxy();
+				adapter_proxy = _bt_get_adapter_proxy();
 				ret_if(adapter_proxy == NULL);
 
-				dbus_g_proxy_call_no_reply(adapter_proxy, "Set",
-						G_TYPE_STRING, BT_ADAPTER_INTERFACE,
-						G_TYPE_STRING, "DiscoverableTimeout",
-						G_TYPE_VALUE, &timeout,
-						G_TYPE_INVALID);
+				/* Need to stop searching */
+				g_dbus_proxy_call_sync(adapter_proxy, "StopDiscovery",
+					NULL,
+					G_DBUS_CALL_FLAGS_NONE,
+					DBUS_TIMEOUT, NULL,
+					&err);
+				if (err) {
+					BT_ERR("Dbus Error : %s", err->message);
+					g_clear_error(&err);
+				}
 
-				g_value_unset(&timeout);
+				event_id = g_timeout_add(BT_DISCOVERY_FINISHED_DELAY,
+				  (GSourceFunc)_bt_discovery_finished_cb, NULL);
 			}
+		} else if (strcasecmp(property, "LEDiscovering") == 0) {
+			gboolean le_discovering = FALSE;
 
-			mode = BLUETOOTH_DISCOVERABLE_MODE_CONNECTABLE;
-
+			g_variant_get(val, "b", &le_discovering);
 			/* Send event to application */
-			BT_INFO("[Connectable]");
+			if (le_discovering == TRUE) {
+				_bt_set_le_scan_status(TRUE);
+				param = g_variant_new("(i)", result);
+				_bt_send_event(BT_LE_ADAPTER_EVENT,
+				BLUETOOTH_EVENT_LE_DISCOVERY_STARTED,
+				param);
+			} else {
+				ret_if(event_id > 0);
+
+				adapter_proxy = _bt_get_adapter_proxy();
+				ret_if(adapter_proxy == NULL);
+
+				/* Need to stop searching */
+				g_dbus_proxy_call_sync(adapter_proxy, "StopLEDiscovery",
+					NULL,
+					G_DBUS_CALL_FLAGS_NONE,
+					DBUS_TIMEOUT, NULL,
+					&err);
+				if (err) {
+					BT_ERR("Dbus Error %s", err->message);
+					g_clear_error(&err);
+				}
+
+				event_id = g_timeout_add(BT_DISCOVERY_FINISHED_DELAY,
+						(GSourceFunc)__bt_le_discovery_finished_cb, NULL);
+				}
+		} else if (strcasecmp(property, "Name") == 0) {
+			char *name = NULL;
+			g_variant_get(val, "s", &name);
+			param = g_variant_new("(is)", result, name);
+			/* Send event to application */
 			_bt_send_event(BT_ADAPTER_EVENT,
+				BLUETOOTH_EVENT_LOCAL_NAME_CHANGED,
+				param);
+			g_free(name);
+		} else if (strcasecmp(property, "Alias") == 0) {
+			char *alias = NULL;
+			g_variant_get(val, "s", &alias);
+			param = g_variant_new("(is)", result, alias);
+			/* Send event to application */
+			_bt_send_event(BT_ADAPTER_EVENT,
+				BLUETOOTH_EVENT_LOCAL_NAME_CHANGED,
+				param);
+			g_free(alias);
+		} else if (strcasecmp(property, "Discoverable") == 0) {
+			gboolean discoverable = FALSE;
+
+			g_variant_get(val, "b", &discoverable);
+			BT_DBG("discoverable %d", discoverable);
+
+			if (discoverable == FALSE) {
+				if (_bt_get_discoverable_timeout_property() > 0) {
+					int time = 0;
+					adapter_proxy = _bt_get_adapter_properties_proxy();
+					ret_if(adapter_proxy == NULL);
+					g_dbus_proxy_call_sync(adapter_proxy, "Set",
+					g_variant_new("(ssv)", BT_ADAPTER_INTERFACE,
+						"DiscoverableTimeout",
+						g_variant_new("i", time)),
+					G_DBUS_CALL_FLAGS_NONE,
+					DBUS_TIMEOUT, NULL,
+					&err);
+
+					if (err != NULL) {
+						BT_ERR("StopLEDiscovery Failed: %s", err->message);
+						g_error_free(err);
+					}
+				}
+
+				mode = BLUETOOTH_DISCOVERABLE_MODE_CONNECTABLE;
+
+				/* Send event to application */
+				BT_INFO("[Connectable]");
+				param = g_variant_new("(in)", result, mode);
+				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_DISCOVERABLE_MODE_CHANGED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_INT16, &mode,
-					DBUS_TYPE_INVALID);
-		} else {
+					param);
+			} else {
+				_bt_get_discoverable_mode(&mode);
+
+				/* Event will be sent by "DiscoverableTimeout" signal */
+				if (mode != BLUETOOTH_DISCOVERABLE_MODE_GENERAL_DISCOVERABLE) {
+					g_free(property);
+					g_variant_unref(val);
+					return;
+				}
+
+				/* Send event to application */
+				BT_INFO("[General Discoverable]");
+				param = g_variant_new("(in)", result, mode);
+				_bt_send_event(BT_ADAPTER_EVENT,
+					BLUETOOTH_EVENT_DISCOVERABLE_MODE_CHANGED,
+					param);
+			}
+		} else if (strcasecmp(property, "DiscoverableTimeout") == 0) {
 			_bt_get_discoverable_mode(&mode);
 
-			/* Event will be sent by "DiscoverableTimeout" signal */
-			if (mode != BLUETOOTH_DISCOVERABLE_MODE_GENERAL_DISCOVERABLE)
+			/* Event was already sent by "Discoverable" signal */
+			if (mode == BLUETOOTH_DISCOVERABLE_MODE_CONNECTABLE ||
+				mode == BLUETOOTH_DISCOVERABLE_MODE_GENERAL_DISCOVERABLE) {
+				g_free(property);
+				g_variant_unref(val);
 				return;
+			}
 
 			/* Send event to application */
-			BT_INFO("[General Discoverable]");
+			BT_INFO("[Limited Discoverable (Timeout %u secs)]",
+			_bt_get_discoverable_timeout_property());
+			param = g_variant_new("(in)", result, mode);
 			_bt_send_event(BT_ADAPTER_EVENT,
-					BLUETOOTH_EVENT_DISCOVERABLE_MODE_CHANGED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_INT16, &mode,
-					DBUS_TYPE_INVALID);
-		}
-	} else if (strcasecmp(property, "DiscoverableTimeout") == 0) {
-		_bt_get_discoverable_mode(&mode);
-
-		/* Event was already sent by "Discoverable" signal */
-		if (mode == BLUETOOTH_DISCOVERABLE_MODE_CONNECTABLE ||
-		    mode == BLUETOOTH_DISCOVERABLE_MODE_GENERAL_DISCOVERABLE)
-			return;
-
-		/* Send event to application */
-		BT_INFO("[Limited Discoverable (Timeout %u secs)]",
-				_bt_get_discoverable_timeout_property());
-
-		_bt_send_event(BT_ADAPTER_EVENT,
 				BLUETOOTH_EVENT_DISCOVERABLE_MODE_CHANGED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_INT16, &mode,
-				DBUS_TYPE_INVALID);
-	} else if (strcasecmp(property, "Powered") == 0) {
-/* TODO: Need to check this operation!! */
-		gboolean powered = FALSE;
-		int bt_state;
+				param);
+		} else if (strcasecmp(property, "Powered") == 0) {
+			/* TODO: Need to check this operation!! */
+			gboolean powered = FALSE;
+			int bt_state;
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &powered);
-		BT_DBG("Powered = %d", powered);
-		if (powered == FALSE) {
-			if (vconf_get_int(VCONFKEY_BT_STATUS, &bt_state) == 0 &&
+			g_variant_get(val, "b" ,&powered);
+			BT_DBG("Powered = %d", powered);
+			if (powered == FALSE) {
+#ifdef USB_BLUETOOTH
+				_bt_handle_adapter_removed();
+#else
+				if (vconf_get_int(VCONFKEY_BT_STATUS, &bt_state) == 0 &&
 				bt_state != VCONFKEY_BT_STATUS_OFF) {
-				_bt_disable_adapter();
+					_bt_disable_adapter();
+				}
+#endif
+				if (vconf_get_int(VCONFKEY_BT_LE_STATUS, &bt_state) == 0 &&
+					bt_state != VCONFKEY_BT_LE_STATUS_OFF) {
+					_bt_set_le_disabled(BLUETOOTH_ERROR_NONE);
+				}
 			}
-			if (vconf_get_int(VCONFKEY_BT_LE_STATUS, &bt_state) == 0 &&
-				bt_state != VCONFKEY_BT_LE_STATUS_OFF) {
-				_bt_set_le_disabled(BLUETOOTH_ERROR_NONE);
+			else {
+#ifdef USB_BLUETOOTH
+				_bt_handle_adapter_added();
+#endif
 			}
-		}
-	} else if (strcasecmp(property, "Connectable") == 0) {
-		gboolean connectable = FALSE;
+		} else if (strcasecmp(property, "Connectable") == 0) {
+			gboolean connectable = FALSE;
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &connectable);
+			g_variant_get(val, "b", &connectable);
 
-		BT_DBG("Connectable property is changed : %d", connectable);
-
-		_bt_send_event(BT_ADAPTER_EVENT,
+			BT_DBG("Connectable property is changed : %d", connectable);
+			param = g_variant_new("(b)", connectable);
+			_bt_send_event(BT_ADAPTER_EVENT,
 				BLUETOOTH_EVENT_CONNECTABLE_CHANGED,
-				DBUS_TYPE_BOOLEAN, &connectable,
-				DBUS_TYPE_INVALID);
-
-		if (_bt_adapter_get_status() == BT_DEACTIVATING &&
+				param);
+			if (_bt_adapter_get_status() == BT_DEACTIVATING &&
 			_bt_adapter_get_le_status() == BT_LE_ACTIVATED &&
 			connectable == 0)
-				_bt_set_disabled(BLUETOOTH_ERROR_NONE);
-	} else if (strcasecmp(property, "SupportedLEFeatures") == 0) {
-		char *name = NULL;
-		char *val = NULL;
-		DBusMessageIter array_iter;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-
-		if(dbus_message_iter_get_arg_type(&value_iter) == DBUS_TYPE_ARRAY) {
-			dbus_message_iter_recurse(&value_iter, &array_iter);
-
-			while (dbus_message_iter_get_arg_type(&array_iter) !=
-						DBUS_TYPE_INVALID) {
-				dbus_message_iter_get_basic(&array_iter, &name);
-				if (!dbus_message_iter_next(&array_iter))
-					break;
-
-				dbus_message_iter_get_basic(&array_iter, &val);
-
-				BT_DBG("name[%s] value[%s]", name, val);
-
-				if (FALSE == _bt_update_le_feature_support(name, val))
-					BT_INFO("Fail to update LE feature info");
-
-				if (!dbus_message_iter_next(&array_iter))
-					break;
+			_bt_set_disabled(BLUETOOTH_ERROR_NONE);
+		} else if (strcasecmp(property, "SupportedLEFeatures") == 0) {
+			char *name = NULL;
+			char *value = NULL;
+			GVariantIter *iter = NULL;
+			g_variant_get(val, "as", &iter);
+			if (iter) {
+				while (g_variant_iter_loop(iter, "s", &name)) {
+					BT_DBG("name = %s", name);
+					g_variant_iter_loop(iter, "s", &value);
+					BT_DBG("Value = %s", value);
+					if (FALSE == _bt_update_le_feature_support(name, value))
+						BT_INFO("Fail to update LE feature info");
+				}
+				g_variant_iter_free(iter);
 			}
+		} else if (strcasecmp(property, "IpspInitStateChanged") == 0) {
+			gboolean ipsp_initialized = FALSE;
+
+			g_variant_get(val, "b", &ipsp_initialized);
+			BT_DBG("IPSP init state changed: %d", ipsp_initialized);
+			param = g_variant_new("(b)", ipsp_initialized);
+
+			/* Send event to application */
+			_bt_send_event(BT_ADAPTER_EVENT,
+					BLUETOOTH_EVENT_IPSP_INIT_STATE_CHANGED,
+					param);
 		}
-	} else {
-		BT_DBG("property : [%s]", property);
 	}
 }
 
-static void __bt_obex_property_changed_event(DBusMessageIter *msg_iter, const char *path)
+static void __bt_obex_property_changed_event(GVariant *msg, const char *path)
 {
 	BT_DBG("+");
 
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
-	const char *property = NULL;
+	GVariantIter value_iter;
+	GVariant *child = NULL, *val = NULL;
+	char *property = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((child = g_variant_iter_next_value (&value_iter))) {
+		g_variant_get(child, "{sv}", &property, &val);
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	do {
-		dbus_message_iter_recurse(&item_iter, &dict_iter);
-
-		dbus_message_iter_get_basic(&dict_iter, &property);
 		ret_if(property == NULL);
-
-		ret_if(!dbus_message_iter_next(&dict_iter));
 
 		BT_DBG("property :%s", property);
 
 		if (strcasecmp(property, "Status") == 0) {
-			const char  *status;
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &status);
+			char  *status;
+			g_variant_get(val, "s", &status);
 
 			if (strcasecmp(status, "active") == 0){
 				_bt_obex_transfer_started(path);
@@ -1035,55 +809,39 @@ static void __bt_obex_property_changed_event(DBusMessageIter *msg_iter, const ch
 				_bt_obex_transfer_completed(path, FALSE);
 				_bt_pbap_obex_transfer_completed(path, FALSE);
 			}
+			g_free(status);
 		} else if (strcasecmp(property, "Transferred") == 0) {
 			static int transferred  = 0;
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &transferred);
+			g_variant_get(val, "t", &transferred);
 
 			_bt_obex_transfer_progress(path,transferred);
 		}
-
-		dbus_message_iter_next(&item_iter);
-	} while (dbus_message_iter_get_arg_type(&item_iter) ==
-			DBUS_TYPE_DICT_ENTRY);
-
+		g_free(property);
+		g_variant_unref(val);
+		g_variant_unref(child);
+	}
 	BT_DBG("-");
 }
 
-static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const char *path)
+static void __bt_device_property_changed_event(GVariant *msg, const char *path)
 {
 	BT_DBG("+");
 
 	int event;
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
-	const char *property = NULL;
+	GVariantIter value_iter;
+	GVariant *val;
+	char *property = NULL;
 	char *address;
+	GVariant *param = NULL;
 	bt_remote_dev_info_t *remote_dev_info;
-
-	dbus_message_iter_recurse(msg_iter, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	do {
-		dbus_message_iter_recurse(&item_iter, &dict_iter);
-
-		dbus_message_iter_get_basic(&dict_iter, &property);
-		ret_if(property == NULL);
-
-		ret_if(!dbus_message_iter_next(&dict_iter));
-
+	g_variant_iter_init (&value_iter, msg);
+	while ((g_variant_iter_loop(&value_iter, "{sv}", &property, &val))) {
+		BT_DBG("Property %s", property);
 		if (strcasecmp(property, "Connected") == 0) {
 			guint connected = 0;
 
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &connected);
+			g_variant_get(val, "i", &connected);
 
 			event = (connected != BLUETOOTH_CONNECTED_LINK_NONE) ?
 				BLUETOOTH_EVENT_DEVICE_CONNECTED :
@@ -1105,14 +863,11 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 						TRUE : FALSE);
 				_bt_free_device_info(remote_dev_info);
 			}
-
+			param = g_variant_new("(is)", result, address);
 			/* Send event to application */
 			_bt_send_event(BT_DEVICE_EVENT,
 					event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					param);
 			g_free(address);
 		} else if (strcasecmp(property, "RSSI") == 0) {
 			bt_remote_dev_info_t *remote_dev_info;
@@ -1124,37 +879,54 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 
 			remote_dev_info = _bt_get_remote_device_info(address);
 			if (remote_dev_info == NULL) {
+				g_free(property);
+				g_variant_unref(val);
 				g_free(address);
 				return;
 			}
 			BT_DBG("Address type  %d", remote_dev_info->addr_type);
 
-			if (remote_dev_info && remote_dev_info->addr_type == 0) {
+			if (remote_dev_info->addr_type == 0) {
 				BT_DBG("Name %s", remote_dev_info->name);
+
+				GVariant *uuids = NULL;
+				GVariantBuilder *builder = NULL;
+				int i = 0;
+				builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+				for (i=0; i < remote_dev_info->uuid_count; i++) {
+					g_variant_builder_add(builder, "s",
+						remote_dev_info->uuids[i]);
+				}
+				uuids = g_variant_new("as", builder);
+				g_variant_builder_unref(builder);
+				GVariant *manufacturer_data =  NULL;
+				manufacturer_data = g_variant_new_from_data(G_VARIANT_TYPE_BYTESTRING,
+									remote_dev_info->manufacturer_data,
+									remote_dev_info->manufacturer_data_len,
+									TRUE,
+									NULL, NULL);
+				param = g_variant_new("(isunsbub@asn@ay)", result,
+							remote_dev_info->address,
+							remote_dev_info->class,
+							remote_dev_info->rssi,
+							remote_dev_info->name,
+							remote_dev_info->paired,
+							remote_dev_info->connected,
+							remote_dev_info->trust,
+							uuids,
+							remote_dev_info->manufacturer_data_len,
+							manufacturer_data);
+
 				_bt_send_event(BT_ADAPTER_EVENT,
-				BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &remote_dev_info->address,
-				DBUS_TYPE_UINT32, &remote_dev_info->class,
-				DBUS_TYPE_INT16, &remote_dev_info->rssi,
-				DBUS_TYPE_STRING, &remote_dev_info->name,
-				DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
-				DBUS_TYPE_UINT32, &remote_dev_info->connected,
-				DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
-				&remote_dev_info->uuids, remote_dev_info->uuid_count,
-				DBUS_TYPE_INT16, &remote_dev_info->manufacturer_data_len,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-				&remote_dev_info->manufacturer_data, remote_dev_info->manufacturer_data_len,
-				DBUS_TYPE_INVALID);
+					BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND,
+					param);
+				g_free(address);
 			}
 			_bt_free_device_info(remote_dev_info);
-			g_free(address);
 		} else if (strcasecmp(property, "GattConnected") == 0) {
 			gboolean gatt_connected = FALSE;
 
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &gatt_connected);
+			g_variant_get(val, "b", &gatt_connected);
 
 			event = gatt_connected ? BLUETOOTH_EVENT_GATT_CONNECTED :
 					BLUETOOTH_EVENT_GATT_DISCONNECTED;
@@ -1165,28 +937,24 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 
 			BT_DBG("gatt_connected: %d", gatt_connected);
 			BT_DBG("address: %s", address);
-
+			param = g_variant_new("(is)", result, address);
 			/* Send event to application */
 			_bt_send_event(BT_DEVICE_EVENT,
 					event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					param);
 			g_free(address);
 		} else if (strcasecmp(property, "Paired") == 0) {
 			gboolean paired = FALSE;
 			bt_remote_dev_info_t *remote_dev_info;
-
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &paired);
-
+			g_variant_get(val, "b", &paired);
 			_bt_agent_set_canceled(FALSE);
 			/* BlueZ sends paired signal for each paired device */
 			/* during activation, We should ignore this, otherwise*/
 			/* application thinks that a new device got paired */
 			if (_bt_adapter_get_status() != BT_ACTIVATED) {
 				BT_DBG("BT is not activated, so ignore this");
+				g_free(property);
+				g_variant_unref(val);
 				return;
 			}
 
@@ -1196,6 +964,8 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 
 			remote_dev_info = _bt_get_remote_device_info(address);
 			if (remote_dev_info == NULL) {
+				g_free(property);
+				g_variant_unref(val);
 				g_free(address);
 				return;
 			}
@@ -1203,11 +973,10 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 			if(paired == FALSE) {
 				BT_INFO("Unpaired: %s", address);
 				__bt_update_remote_cache_devinfo(address, FALSE);
+				param = g_variant_new("(is)", result, address);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_BONDED_DEVICE_REMOVED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
+					param);
 			} else {
 				BT_INFO("Paired: %s", address);
 				__bt_update_remote_cache_devinfo(address, TRUE);
@@ -1216,25 +985,40 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 					BT_DBG("Try to Pair by me");
 					_bt_free_device_info(remote_dev_info);
 					g_free(address);
+					g_free(property);
+					g_variant_unref(val);
 					return;
 				}
+				GVariant *uuids = NULL;
+				GVariantBuilder *builder = NULL;
+				int i = 0;
+				builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+				for (i=0; i < remote_dev_info->uuid_count; i++) {
+					g_variant_builder_add(builder, "s",
+						remote_dev_info->uuids[i]);
+				}
+				uuids = g_variant_new("as", builder);
+				g_variant_builder_unref(builder);
+				GVariant *manufacturer_data =  NULL;
+				manufacturer_data = g_variant_new_from_data(G_VARIANT_TYPE_BYTESTRING,
+									remote_dev_info->manufacturer_data,
+									remote_dev_info->manufacturer_data_len,
+									TRUE,
+									NULL, NULL);
 
+				param = g_variant_new("(isunsbub@asn@ay)", result,
+							address, remote_dev_info->class,
+							remote_dev_info->rssi,
+							remote_dev_info->name,
+							remote_dev_info->paired,
+							remote_dev_info->connected,
+							remote_dev_info->trust,
+							uuids,
+							remote_dev_info->manufacturer_data_len,
+							manufacturer_data);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_BONDING_FINISHED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_UINT32, &remote_dev_info->class,
-					DBUS_TYPE_INT16, &remote_dev_info->rssi,
-					DBUS_TYPE_STRING, &remote_dev_info->name,
-					DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
-					DBUS_TYPE_UINT32, &remote_dev_info->connected,
-					DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
-					DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
-					&remote_dev_info->uuids, remote_dev_info->uuid_count,
-					DBUS_TYPE_INT16, &remote_dev_info->manufacturer_data_len,
-					DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-					&remote_dev_info->manufacturer_data, remote_dev_info->manufacturer_data_len,
-					DBUS_TYPE_INVALID);
+					param);
 			}
 			_bt_free_device_info(remote_dev_info);
 			g_free(address);
@@ -1244,11 +1028,12 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 
 			if (_bt_adapter_get_status() != BT_ACTIVATED) {
 				BT_DBG("BT is not activated, so ignore this");
+				g_free(property);
+				g_variant_unref(val);
 				return;
 			}
 
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &paired);
+			g_variant_get(val, "b", &paired);
 			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 			BT_DBG("LegacyPaired: %d", paired);
 			_bt_convert_device_path_to_address(path, address);
@@ -1256,6 +1041,8 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 			remote_dev_info = _bt_get_remote_device_info(address);
 			if (remote_dev_info == NULL) {
 				g_free(address);
+				g_free(property);
+				g_variant_unref(val);
 				return;
 			}
 
@@ -1269,8 +1056,7 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 		} else if (strcasecmp(property, "Trusted") == 0) {
 			gboolean trusted = FALSE;
 
-			dbus_message_iter_recurse(&dict_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &trusted);
+			g_variant_get(val, "b", &trusted);
 
 			event = trusted ? BLUETOOTH_EVENT_DEVICE_AUTHORIZED :
 					BLUETOOTH_EVENT_DEVICE_UNAUTHORIZED;
@@ -1281,526 +1067,413 @@ static void __bt_device_property_changed_event(DBusMessageIter *msg_iter, const 
 
 			BT_DBG("trusted: %d", trusted);
 			BT_DBG("address: %s", address);
+			param = g_variant_new("(is)", result, address);
+			/* Send event to application */
+			_bt_send_event(BT_DEVICE_EVENT,
+					event,
+					param);
+			g_free(address);
+		} else if (strcasecmp(property, "IpspConnected") == 0) {
+			gboolean connected = FALSE;
+
+			g_variant_get(val, "b", &connected);
+
+
+			event = connected ? BLUETOOTH_EVENT_IPSP_CONNECTED :
+					BLUETOOTH_EVENT_IPSP_DISCONNECTED;
+
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+
+			_bt_convert_device_path_to_address(path, address);
+
+			BT_DBG("Ipspconnected: %d", connected);
+			BT_DBG("address: %s", address);
+			param = g_variant_new("(is)", result, address);
 
 			/* Send event to application */
 			_bt_send_event(BT_DEVICE_EVENT,
 					event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					param);
 			g_free(address);
 		}
-		dbus_message_iter_next(&item_iter);
-	} while (dbus_message_iter_get_arg_type(&item_iter) ==
-			DBUS_TYPE_DICT_ENTRY);
+	}
 	BT_DBG("-");
 }
 
-static void __bt_media_control_changed_event(DBusMessageIter *msg_iter, const char *path)
+static void __bt_media_control_changed_event(GVariant *msg, const char *path)
 {
 	int event;
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
-	const char *property = NULL;
+	GVariantIter value_iter;
+	char *property = NULL;
 	char *address;
+	GVariant *val = NULL;
+	GVariant *child = NULL;
 	bt_remote_dev_info_t *remote_dev_info;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((child = g_variant_iter_next_value (&value_iter))) {
+		g_variant_get(child, "{sv}", &property, &val);
+		BT_INFO("Property %s", property);
+		if (strcasecmp(property, "Connected") == 0) {
+			gboolean connected = FALSE;
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
+			g_variant_get(val, "b", &connected);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
+			event = connected ? BLUETOOTH_EVENT_AVRCP_CONNECTED :
+					BLUETOOTH_EVENT_AVRCP_DISCONNECTED;
 
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
-	dbus_message_iter_get_basic(&dict_iter, &property);
-	ret_if(property == NULL);
+			_bt_convert_device_path_to_address(path, address);
 
-	ret_if(!dbus_message_iter_next(&dict_iter));
+			BT_DBG("connected: %d", connected);
+			BT_DBG("address: %s", address);
 
-	if (strcasecmp(property, "Connected") == 0) {
-		gboolean connected = FALSE;
+			remote_dev_info = _bt_get_remote_device_info(address);
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &connected);
-
-		event = connected ? BLUETOOTH_EVENT_AVRCP_CONNECTED :
-				BLUETOOTH_EVENT_AVRCP_DISCONNECTED;
-
-		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-		_bt_convert_device_path_to_address(path, address);
-
-		BT_DBG("connected: %d", connected);
-		BT_DBG("address: %s", address);
-
-		remote_dev_info = _bt_get_remote_device_info(address);
-
-		if (remote_dev_info != NULL) {
-			__bt_device_remote_connected_properties(
-			remote_dev_info, address, connected);
-			_bt_free_device_info(remote_dev_info);
+			if (remote_dev_info != NULL) {
+				__bt_device_remote_connected_properties(
+				remote_dev_info, address, connected);
+				_bt_free_device_info(remote_dev_info);
+			}
+			param = g_variant_new("(is)", result, address);
+			/* Send event to application */
+			_bt_send_event(BT_AVRCP_EVENT,
+				event,
+				param);
+			g_free(address);
 		}
-
-		/* Send event to application */
-		_bt_send_event(BT_AVRCP_EVENT,
-			event,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
-		g_free(address);
+		g_free(property);
+		g_variant_unref(child);
+		g_variant_unref(val);
 	}
-
 	BT_DBG("-");
 }
 
-void _bt_handle_property_changed_event(DBusMessage *msg)
+void _bt_handle_property_changed_event(GVariant *msg, const char *object_path)
 {
-	DBusMessageIter item_iter;
-	const char *member = dbus_message_get_member(msg);
-	const char *interface_name = NULL;
+	char *interface_name = NULL;
+	GVariant *val = NULL;
 
-	ret_if(member == NULL);
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, &interface_name);
-
-	ret_if(interface_name == NULL);
-
-	ret_if(dbus_message_iter_next(&item_iter) == FALSE);
-
-	ret_if(dbus_message_iter_get_arg_type(&item_iter) != DBUS_TYPE_ARRAY);
+	g_variant_get(msg, "(&s@a{sv}@as)", &interface_name, &val,NULL);
 
 	if (strcasecmp(interface_name, BT_ADAPTER_INTERFACE) == 0) {
-		__bt_adapter_property_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_adapter_property_changed_event(val,
+					object_path);
 	} else if (strcasecmp(interface_name, BT_DEVICE_INTERFACE) == 0) {
-		__bt_device_property_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_device_property_changed_event(val,object_path);
 	} else if (strcasecmp(interface_name, BT_OBEX_TRANSFER_INTERFACE) == 0) {
 		BT_DBG("BT_OBEX_TRANSFER_INTERFACE");
-		__bt_obex_property_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_obex_property_changed_event(val,
+					object_path);
 	} else if (strcasecmp(interface_name, BT_MEDIA_CONTROL_INTERFACE) == 0) {
-		__bt_media_control_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_media_control_changed_event(val,
+					object_path);
 	} else if (strcasecmp(interface_name, BT_PLAYER_CONTROL_INTERFACE) == 0) {
-		_bt_handle_avrcp_control_event(&item_iter,
-					dbus_message_get_path(msg));
+		_bt_handle_avrcp_control_event(val,
+					object_path);
 	} else if (strcasecmp(interface_name, BT_NETWORK_CLIENT_INTERFACE) == 0) {
 		BT_DBG("BT_NETWORK_CLIENT_INTERFACE");
-		_bt_handle_network_client_event(&item_iter,
-					dbus_message_get_path(msg));
+		_bt_handle_network_client_event(val,
+					object_path);
 	} else if (strcasecmp(interface_name, BT_GATT_CHAR_INTERFACE) == 0) {
-		__bt_gatt_char_property_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_gatt_char_property_changed_event(val,
+					object_path);
 	}
+	g_variant_unref(val);
 }
 
-void __bt_opc_property_changed_event(DBusMessageIter *msg_iter,
+void __bt_opc_property_changed_event(GVariant *msg,
 						const char *path)
 {
-	DBusMessageIter value_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter item_iter;
-	const char *property = NULL;
+	GVariantIter value_iter;
+	char *property = NULL;
+	GVariant *val = NULL;
+	GVariant *child = NULL;
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
+	g_variant_iter_init (&value_iter, msg);
+	while ((child = g_variant_iter_next_value (&value_iter))) {
+		g_variant_get(child, "{sv}", &property, &val);
+		ret_if(property == NULL);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-				!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
+		if (strcasecmp(property, "Status") == 0) {
+			char *status = NULL;
+			g_variant_get(val, "s", &status);
+			BT_DBG("Status is %s", status);
 
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
+			if(strcasecmp(status, "active") == 0){
+				_bt_obex_client_started(path);
+			}else if (strcasecmp(status, "complete") == 0) {
+				_bt_obex_client_completed(path, TRUE);
+			}else if (strcasecmp(status, "error") == 0){
+				_bt_obex_client_completed(path, FALSE);
+			}
+			g_free(status);
+		} else if (strcasecmp(property, "Transferred") == 0) {
+			static int transferred  = 0;
+			g_variant_get(val, "t", &transferred);
 
-	dbus_message_iter_get_basic(&dict_iter, &property);
-	ret_if(property == NULL);
-
-	ret_if(!dbus_message_iter_next(&dict_iter));
-
-	if (strcasecmp(property, "Status") == 0) {
-		const char *status = NULL;
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &status);
-
-		BT_INFO("Status is %s", status);
-
-		if(strcasecmp(status, "active") == 0){
-			_bt_obex_client_started(path);
-		}else if (strcasecmp(status, "complete") == 0) {
-			_bt_obex_client_completed(path, TRUE);
-		}else if (strcasecmp(status, "error") == 0){
-			_bt_obex_client_completed(path, FALSE);
+			_bt_obex_client_progress(path, transferred);
+		} else {
+			BT_DBG("property : [%s]", property);
 		}
-	} else if (strcasecmp(property, "Transferred") == 0) {
-		static int transferred  = 0;
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &transferred);
-
-		_bt_obex_client_progress(path, transferred);
-	} else {
-		BT_DBG("property : [%s]", property);
+		g_free(property);
+		g_variant_unref(child);
+		g_variant_unref(val);
 	}
 }
 
-void _bt_opc_property_changed_event(DBusMessage *msg)
+void _bt_opc_property_changed_event(GVariant *msg, char *path)
 {
-	DBusMessageIter item_iter;
-	const char *member = dbus_message_get_member(msg);
-	const char *interface_name = NULL;
-
-	ret_if(member == NULL);
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-				!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, &interface_name);
-
-	ret_if(interface_name == NULL);
-
-	BT_DBG("interface: %s", interface_name);
-
-	ret_if(dbus_message_iter_next(&item_iter) == FALSE);
-
-	ret_if(dbus_message_iter_get_arg_type(&item_iter) != DBUS_TYPE_ARRAY);
-
+	char *interface_name = NULL;
+	GVariant *value = NULL;
+	g_variant_get(msg, "(&s@a{sv}@as)", &interface_name, &value, NULL);
+	BT_INFO("interface_name = %s", interface_name);
 	if (strcasecmp(interface_name, BT_OBEX_TRANSFER_INTERFACE) == 0) {
-		__bt_opc_property_changed_event(&item_iter,
-					dbus_message_get_path(msg));
+		__bt_opc_property_changed_event(value,
+					path);
 	} else {
 		BT_DBG("interface_name : [%s]", interface_name);
 	}
+	g_variant_unref(value);
 }
 
 
-void _bt_handle_input_event(DBusMessage *msg)
+void _bt_handle_input_event(GVariant *msg, const char *path)
 {
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter value_iter;
 	gboolean property_flag = FALSE;
-	const char *member = dbus_message_get_member(msg);
-	const char *path = dbus_message_get_path(msg);
-	const char *property = NULL;
+	GVariantIter value_iter;
+	char *property = NULL;
+	GVariant *child = NULL, *val = NULL;
 	bt_remote_dev_info_t *remote_dev_info;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((child = g_variant_iter_next_value (&value_iter))) {
+		g_variant_get(child, "{sv}", &property, &val);
 
-	ret_if(member == NULL);
+		ret_if(property == NULL);
 
-	dbus_message_iter_init(msg, &item_iter);
+		if (strcasecmp(property, "Connected") == 0) {
+			int event = BLUETOOTH_EVENT_NONE;
+			char *address;
+			g_variant_get(val, "b", &property_flag);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
-	dbus_message_iter_get_basic(&item_iter, &property);
+			_bt_convert_device_path_to_address(path, address);
 
-	ret_if(property == NULL);
+			event = (property_flag == TRUE) ?
+					BLUETOOTH_HID_CONNECTED :
+					BLUETOOTH_HID_DISCONNECTED;
+			param = g_variant_new("(is)", result, address);
+			_bt_send_event(BT_HID_EVENT, event,
+				param);
+			/* Check HID connection type (Keyboard or Mouse) and update the status */
+			remote_dev_info = _bt_get_remote_device_info(address);
 
-	if (strcasecmp(property, "Connected") == 0) {
-		int event = BLUETOOTH_EVENT_NONE;
-		char *address;
-
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &property_flag);
-
-		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-		_bt_convert_device_path_to_address(path, address);
-
-		event = (property_flag == TRUE) ?
-				BLUETOOTH_HID_CONNECTED :
-				BLUETOOTH_HID_DISCONNECTED;
-
-		_bt_send_event(BT_HID_EVENT, event,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
-
-		/* Check HID connection type (Keyboard or Mouse) and update the status */
-		remote_dev_info = _bt_get_remote_device_info(address);
-
-		if (property_flag == TRUE) {
-			hid_connected_device_count++;
-			__bt_set_device_values(TRUE,
-					VCONFKEY_BT_DEVICE_HID_CONNECTED);
-		} else {
-			hid_connected_device_count--;
-			if (hid_connected_device_count == 0)
-				__bt_set_device_values(FALSE,
+			if (property_flag == TRUE) {
+				hid_connected_device_count++;
+				__bt_set_device_values(TRUE,
 						VCONFKEY_BT_DEVICE_HID_CONNECTED);
-		}
+			} else {
+				hid_connected_device_count--;
+				if (hid_connected_device_count == 0)
+					__bt_set_device_values(FALSE,
+							VCONFKEY_BT_DEVICE_HID_CONNECTED);
+			}
 
-		if (remote_dev_info != NULL) {
-			BT_DBG("HID device class [%x]", remote_dev_info->class);
-			if (remote_dev_info->class &
+			if (remote_dev_info != NULL) {
+				BT_DBG("HID device class [%x]", remote_dev_info->class);
+				if (remote_dev_info->class &
 					BLUETOOTH_DEVICE_MINOR_CLASS_KEY_BOARD) {
-				__bt_set_device_values(property_flag,
+					__bt_set_device_values(property_flag,
 						VCONFKEY_BT_DEVICE_HID_KEYBOARD_CONNECTED);
 
-			}
+				}
 
-			if (remote_dev_info->class &
-					BLUETOOTH_DEVICE_MINOR_CLASS_POINTING_DEVICE)
-			{
-				__bt_set_device_values(property_flag,
-						VCONFKEY_BT_DEVICE_HID_MOUSE_CONNECTED);
+				if (remote_dev_info->class &
+						BLUETOOTH_DEVICE_MINOR_CLASS_POINTING_DEVICE) {
+					__bt_set_device_values(property_flag,
+							VCONFKEY_BT_DEVICE_HID_MOUSE_CONNECTED);
+				}
+				_bt_free_device_info(remote_dev_info);
 			}
-			_bt_free_device_info(remote_dev_info);
+			g_free(address);
 		}
+		g_free(property);
+		g_variant_unref(val);
+		g_variant_unref(child);
+	 }
+}
 
-		g_free(address);
-	}
- }
-
-void _bt_handle_network_server_event(DBusMessage *msg)
+void _bt_handle_network_server_event(GVariant *msg, const char *member)
 {
 	int result = BLUETOOTH_ERROR_NONE;
 	char *address = NULL;
 	char *device = NULL;
-	const char *member = dbus_message_get_member(msg);
-
+	GVariant *param = NULL;
 	ret_if(member == NULL);
-
 	if (strcasecmp(member, "PeerConnected") == 0) {
-		if (!dbus_message_get_args(msg, NULL,
-			DBUS_TYPE_STRING, &device,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID)) {
-			BT_ERR("Unexpected parameters in signal");
-			return;
-		}
+		g_variant_get(msg, "(ss)", &device, &address);
 
 		__bt_set_device_values(TRUE,
 				VCONFKEY_BT_DEVICE_PAN_CONNECTED);
-
+		param = g_variant_new("(iss)", result, device, address);
 		_bt_send_event(BT_NETWORK_EVENT, BLUETOOTH_EVENT_NETWORK_SERVER_CONNECTED,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &device,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
+			param);
+		g_free(device);
+		g_free(address);
 		 nap_connected_device_count++;
 	} else if (strcasecmp(member, "PeerDisconnected") == 0) {
-		if (!dbus_message_get_args(msg, NULL,
-			DBUS_TYPE_STRING, &device,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID)) {
-			BT_ERR("Unexpected parameters in signal");
-			return;
-		}
+		g_variant_get(msg, "(ss)", &device, &address);
 		nap_connected_device_count--;
 		if (nap_connected_device_count == 0)
 			__bt_set_device_values(FALSE,
 				VCONFKEY_BT_DEVICE_PAN_CONNECTED);
-
+		param = g_variant_new("(iss)", result, device, address);
 		_bt_send_event(BT_NETWORK_EVENT, BLUETOOTH_EVENT_NETWORK_SERVER_DISCONNECTED,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &device,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
+			param);
+		g_free(device);
+		g_free(address);
 	}
 }
 
-void _bt_handle_network_client_event(DBusMessageIter *msg_iter,
+void _bt_handle_network_client_event(GVariant *msg,
 				const char *path)
 {
 	BT_DBG("+");
 
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter value_iter;
 	gboolean property_flag = FALSE;
-	const char *property = NULL;
+	char *property = NULL;
+	GVariant *val = NULL;
+	GVariantIter value_iter;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((g_variant_iter_loop(&value_iter, "{sv}", &property, &val))) {
+		if (strcasecmp(property, "Connected") == 0) {
+			int event = BLUETOOTH_EVENT_NONE;
+			char *address;
 
-	dbus_message_iter_recurse(msg_iter, &item_iter);
+			g_variant_get(val, "b", &property_flag);
+			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
+			_bt_convert_device_path_to_address(path, address);
 
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
-	dbus_message_iter_get_basic(&dict_iter, &property);
-
-	ret_if(property == NULL);
-	ret_if(!dbus_message_iter_next(&dict_iter));
-
-	if (strcasecmp(property, "Connected") == 0) {
-		int event = BLUETOOTH_EVENT_NONE;
-		char *address;
-
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &property_flag);
-
-		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-		_bt_convert_device_path_to_address(path, address);
-
-		BT_DBG("property_flag %d", property_flag);
-		if (property_flag == TRUE) {
-			event = BLUETOOTH_EVENT_NETWORK_CONNECTED;
-			nap_connected_device_count++;
-			__bt_set_device_values(TRUE,
-				VCONFKEY_BT_DEVICE_PAN_CONNECTED);
-		} else {
-			event = BLUETOOTH_EVENT_NETWORK_DISCONNECTED;
-			nap_connected_device_count--;
-			if (nap_connected_device_count == 0)
-				__bt_set_device_values(FALSE,
+			BT_DBG("property_flag %d", property_flag);
+			if (property_flag == TRUE) {
+				event = BLUETOOTH_EVENT_NETWORK_CONNECTED;
+				nap_connected_device_count++;
+				__bt_set_device_values(TRUE,
 					VCONFKEY_BT_DEVICE_PAN_CONNECTED);
+			} else {
+				event = BLUETOOTH_EVENT_NETWORK_DISCONNECTED;
+				nap_connected_device_count--;
+				if (nap_connected_device_count == 0)
+					__bt_set_device_values(FALSE,
+						VCONFKEY_BT_DEVICE_PAN_CONNECTED);
+			}
+			param = g_variant_new("(is)", result, address);
+			_bt_send_event(BT_NETWORK_EVENT, event,
+				param);
+
+			g_free(address);
 		}
-
-		_bt_send_event(BT_NETWORK_EVENT, event,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
-
-		g_free(address);
 	}
 	BT_DBG("-");
 }
 
-void __bt_gatt_char_property_changed_event(DBusMessageIter *msg_iter,
+void __bt_gatt_char_property_changed_event(GVariant *msg,
 				const char *path)
 {
-	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter dict_iter;
-	DBusMessageIter value_iter;
-	const char *property = NULL;
+	GVariantIter value_iter;
+	char *property = NULL;
 	char * char_handle = NULL;
-
-	dbus_message_iter_recurse(msg_iter, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_DICT_ENTRY) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	dbus_message_iter_recurse(&item_iter, &dict_iter);
-	dbus_message_iter_get_basic(&dict_iter, &property);
-
-	ret_if(property == NULL);
-	ret_if(!dbus_message_iter_next(&dict_iter));
-
+	GVariant *val = NULL;
+	int result = BLUETOOTH_ERROR_NONE;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
 	char_handle = g_strdup(path);
+	while ((g_variant_iter_loop(&value_iter, "{sv}", &property, &val))) {
+		BT_INFO("Property %s", property);
 
-	if (strcasecmp(property, "Notifying") == 0) {
-		gboolean property_flag = FALSE;
+		ret_if(property == NULL);
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &property_flag);
+		if (strcasecmp(property, "Notifying") == 0) {
+			gboolean property_flag = FALSE;
+			g_variant_get(val, "b", &property_flag);
+			if (property_flag == TRUE)
+				BT_DBG("notifying is enabled");
+			else
+				BT_DBG("notifying is disabled");
+		} else if (strcasecmp(property, "ChangedValue") == 0) {
+			int len = 0;
+			GByteArray *gp_byte_array = NULL;
+			BT_INFO("Type '%s'\n", g_variant_get_type_string (val));
 
-		if (property_flag == TRUE)
-			BT_DBG("notifying is enabled");
-		else
-			BT_DBG("notifying is disabled");
-	} else if (strcasecmp(property, "ChangedValue") == 0) {
-		DBusMessageIter array_value_iter;
-		char byte = 0;
-		GByteArray *gp_byte_array = NULL;
+			if (val) {
+				gp_byte_array = g_byte_array_new();
+				len = g_variant_get_size(val);
+				BT_DBG("Len = %d", len);
+				g_byte_array_append (gp_byte_array,
+					(const guint8 *) g_variant_get_data(val), len);
+				if (gp_byte_array->len != 0) {
+					GVariant *byte_array = NULL;
+					byte_array = g_variant_new_from_data(
+								G_VARIANT_TYPE_BYTESTRING,
+								gp_byte_array->data,
+								gp_byte_array->len,
+								TRUE, NULL, NULL);
+					param = g_variant_new("(is@ay)", result, char_handle,
+								byte_array);
 
-		dbus_message_iter_recurse(&dict_iter, &value_iter);
-		dbus_message_iter_recurse(&value_iter, &array_value_iter);
-		gp_byte_array = g_byte_array_new();
-
-		while (dbus_message_iter_get_arg_type(&array_value_iter) == DBUS_TYPE_BYTE) {
-				dbus_message_iter_get_basic(&array_value_iter, &byte);
-				g_byte_array_append(gp_byte_array, (const guint8 *)&byte, 1);
-				dbus_message_iter_next(&array_value_iter);
+					/* Send event only registered client */
+					_bt_send_char_value_changed_event(param);
+				}
+				g_byte_array_free(gp_byte_array, TRUE);
+			}
 		}
-		if (gp_byte_array->len != 0) {
-			_bt_send_event(BT_DEVICE_EVENT,
-				BLUETOOTH_EVENT_GATT_CHAR_VAL_CHANGED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &char_handle,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-				&gp_byte_array->data, gp_byte_array->len,
-				DBUS_TYPE_INVALID);
-		}
-		g_byte_array_free(gp_byte_array, TRUE);
 	}
 	g_free(char_handle);
 }
-void _bt_handle_device_event(DBusMessage *msg)
+void _bt_handle_device_event(GVariant *msg, const char *member,const char *path)
 {
 	int event;
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter value_iter;
 	char *address;
 	char *dev_name;
-	const char *member = dbus_message_get_member(msg);
-	const char *path = dbus_message_get_path(msg);
 	const char *property = NULL;
-
+	GVariant *param = NULL;
 	ret_if(path == NULL);
-	ret_if(member == NULL);
 
 	if (strcasecmp(member, "PropertyChanged") == 0) {
-		dbus_message_iter_init(msg, &item_iter);
 
-		if (dbus_message_iter_get_arg_type(&item_iter)
-						!= DBUS_TYPE_STRING) {
-			BT_ERR("This is bad format dbus");
-			return;
-		}
-
-		dbus_message_iter_get_basic(&item_iter, &property);
+		g_variant_get(msg, "(s)", &property);
 
 		ret_if(property == NULL);
 
 		if (strcasecmp(property, "GattConnected") == 0) {
 			gboolean connected = FALSE;
 			char *address;
-
 			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-			_bt_convert_device_path_to_address(path, address);
+			ret_if(address == NULL);
 
-			dbus_message_iter_next(&item_iter);
-			dbus_message_iter_recurse(&item_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &connected);
+			_bt_convert_device_path_to_address(path, address);
+			g_variant_get(msg, "(b)", &connected);
 
 			event = connected ? BLUETOOTH_EVENT_GATT_CONNECTED :
 					BLUETOOTH_EVENT_GATT_DISCONNECTED;
-
+			param = g_variant_new("(is)", result, address);
 			_bt_send_event(BT_DEVICE_EVENT,
 					event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					param);
 			g_free(address);
 		} else if (strcasecmp(property, "Paired") == 0) {
 			gboolean paired = FALSE;
 			bt_remote_dev_info_t *remote_dev_info;
-			dbus_message_iter_next(&item_iter);
-			dbus_message_iter_recurse(&item_iter, &value_iter);
-			dbus_message_iter_get_basic(&value_iter, &paired);
+			g_variant_get(msg, "(b)", &paired);
 
 			ret_if(paired == FALSE);
 
@@ -1818,6 +1491,7 @@ void _bt_handle_device_event(DBusMessage *msg)
 			}
 
 			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+			ret_if(address == NULL);
 
 			_bt_convert_device_path_to_address(path, address);
 
@@ -1826,24 +1500,36 @@ void _bt_handle_device_event(DBusMessage *msg)
 				g_free(address);
 				return;
 			}
-
+			GVariant *uuids = NULL;
+			GVariantBuilder *builder = NULL;
+			int i = 0;
+			builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+			for (i=0; i < remote_dev_info->uuid_count; i++) {
+				g_variant_builder_add(builder, "s",
+					remote_dev_info->uuids[i]);
+			}
+			uuids = g_variant_new("as", builder);
+			g_variant_builder_unref(builder);
+			GVariant *manufacturer_data = NULL;
+			manufacturer_data = g_variant_new_from_data(
+						G_VARIANT_TYPE_BYTESTRING,
+						remote_dev_info->manufacturer_data,
+						remote_dev_info->manufacturer_data_len,
+						TRUE, NULL, NULL);
+			param = g_variant_new("(isunsbub@asn@ay)", result,
+						address,
+						remote_dev_info->class,
+						remote_dev_info->rssi,
+						remote_dev_info->name,
+						remote_dev_info->paired,
+						remote_dev_info->connected,
+						remote_dev_info->trust,
+						uuids,
+						remote_dev_info->manufacturer_data_len,
+						manufacturer_data);
 			_bt_send_event(BT_ADAPTER_EVENT,
 				BLUETOOTH_EVENT_BONDING_FINISHED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_UINT32, &remote_dev_info->class,
-				DBUS_TYPE_INT16, &remote_dev_info->rssi,
-				DBUS_TYPE_STRING, &remote_dev_info->name,
-				DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
-				DBUS_TYPE_UINT32, &remote_dev_info->connected,
-				DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
-				&remote_dev_info->uuids, remote_dev_info->uuid_count,
-				DBUS_TYPE_INT16, &remote_dev_info->manufacturer_data_len,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-				&remote_dev_info->manufacturer_data, remote_dev_info->manufacturer_data_len,
-				DBUS_TYPE_INVALID);
-
+				param);
 			_bt_free_device_info(remote_dev_info);
 			g_free(address);
 
@@ -1856,6 +1542,7 @@ void _bt_handle_device_event(DBusMessage *msg)
 			ret_if(_bt_is_device_creating() == TRUE);
 
 			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+			ret_if(address == NULL);
 
 			_bt_convert_device_path_to_address(path, address);
 
@@ -1866,20 +1553,35 @@ void _bt_handle_device_event(DBusMessage *msg)
 			}
 
 			BT_DBG("UUID's count = %d", remote_dev_info->uuid_count);
-			if (remote_dev_info->paired && remote_dev_info->uuid_count)
+			if (remote_dev_info->paired && remote_dev_info->uuid_count) {
+				GVariant *uuids = NULL;
+				GVariantBuilder *builder = NULL;
+				int i = 0;
+				builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+				for (i=0; i < remote_dev_info->uuid_count; i++) {
+					g_variant_builder_add(builder, "s",
+						remote_dev_info->uuids[i]);
+				}
+				uuids = g_variant_new("as", builder);
+				g_variant_builder_unref(builder);
+				GVariant *manufacture_data = g_variant_new_from_data((const GVariantType *)"ay",
+						remote_dev_info->manufacturer_data, remote_dev_info->manufacturer_data_len,
+						TRUE, NULL, NULL);
+
+				param = g_variant_new("(isunsbub@asn@ay)", result,
+							address, remote_dev_info->class,
+							remote_dev_info->rssi,
+							remote_dev_info->name,
+							remote_dev_info->paired,
+							remote_dev_info->connected,
+							remote_dev_info->trust,
+							uuids,
+							remote_dev_info->manufacturer_data_len,
+							manufacture_data);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_SERVICE_SEARCHED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_UINT32, &remote_dev_info->class,
-					DBUS_TYPE_INT16, &remote_dev_info->rssi,
-					DBUS_TYPE_STRING, &remote_dev_info->name,
-					DBUS_TYPE_BOOLEAN, &remote_dev_info->paired,
-					DBUS_TYPE_UINT32, &remote_dev_info->connected,
-					DBUS_TYPE_BOOLEAN, &remote_dev_info->trust,
-					DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
-					&remote_dev_info->uuids, remote_dev_info->uuid_count,
-					DBUS_TYPE_INVALID);
+					param);
+			}
 
 			_bt_free_device_info(remote_dev_info);
 			g_free(address);
@@ -1887,10 +1589,10 @@ void _bt_handle_device_event(DBusMessage *msg)
 	} else if (strcasecmp(member, "DeviceConnected") == 0) {
 		unsigned char addr_type = 0;
 
-		dbus_message_iter_init(msg, &item_iter);
-		dbus_message_iter_get_basic(&item_iter, &addr_type);
+		g_variant_get(msg, "(y)", &addr_type);
 
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+		ret_if(address == NULL);
 
 		_bt_convert_device_path_to_address(path, address);
 		dev_name = _bt_get_bonded_device_name(address);
@@ -1901,35 +1603,26 @@ void _bt_handle_device_event(DBusMessage *msg)
 		g_free(dev_name);
 
 		_bt_logging_connection(TRUE, addr_type);
-		journal_bt_connected();
-
+		param = g_variant_new("(isy)", result, address, addr_type);
 		/*Send event to application*/
 		_bt_send_event(BT_DEVICE_EVENT,
 					BLUETOOTH_EVENT_DEVICE_CONNECTED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_BYTE, &addr_type,
-					DBUS_TYPE_INVALID);
-
+					param);
 		g_free(address);
 	} else if (strcasecmp(member, "Disconnected") == 0) {
 		unsigned char disc_reason = 0;
 		unsigned char addr_type = 0;
 		gboolean sending = FALSE;
 
-		if (!dbus_message_get_args(msg, NULL,
-				DBUS_TYPE_BYTE, &addr_type,
-				DBUS_TYPE_BYTE, &disc_reason,
-				DBUS_TYPE_INVALID))
-			return;
+		g_variant_get(msg, "(yy)", &addr_type, &disc_reason);
 
 		result = disc_reason;
 
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+		ret_if(address == NULL);
 
 		_bt_convert_device_path_to_address(path, address);
 		dev_name = _bt_get_bonded_device_name(address);
-		journal_bt_disconnected();
 
 		/* 0x00 BDADDR_BRDER
 		      0x01 BDADDR_LE_PUBLIC
@@ -1950,27 +1643,20 @@ void _bt_handle_device_event(DBusMessage *msg)
 		_bt_opp_client_is_sending(&sending);
 		if(sending == TRUE)
 			_bt_opp_client_check_pending_transfer(address);
-
+		param = g_variant_new("(isy)", result, address, addr_type);
 		_bt_send_event(BT_DEVICE_EVENT,
 					BLUETOOTH_EVENT_DEVICE_DISCONNECTED,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_BYTE, &addr_type,
-					DBUS_TYPE_INVALID);
-
+					param);
 		g_free(address);
 	} else if (strcasecmp(member, "ProfileStateChanged") == 0) {
 		int state = 0;
 		char *profile_uuid = NULL;
 		bt_headset_wait_t *wait_list;
 
-		if (!dbus_message_get_args(msg, NULL,
-				DBUS_TYPE_STRING, &profile_uuid,
-				DBUS_TYPE_INT32, &state,
-				DBUS_TYPE_INVALID)) {
-			return;
-		}
+		g_variant_get(msg, "(si)", &profile_uuid, &state);
+
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+		ret_if(address == NULL);
 
 		_bt_convert_device_path_to_address(path, address);
 
@@ -1999,12 +1685,9 @@ void _bt_handle_device_event(DBusMessage *msg)
 				 * intiate connection for pending profile */
 				_bt_headset_set_local_connection(FALSE);
 			}
-
+			param = g_variant_new("(is)", result, address);
 			_bt_send_event(BT_HEADSET_EVENT, event,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INVALID);
-
+				param);
 			connected = _bt_is_headset_type_connected(BT_AUDIO_A2DP,
 						connected_address);
 			if (connected) {
@@ -2032,6 +1715,7 @@ void _bt_handle_device_event(DBusMessage *msg)
 
 			if (!_bt_is_service_connected(address, BT_AUDIO_A2DP)) {
 				g_free(address);
+				g_free(profile_uuid);
 				return;
 			}
 
@@ -2039,18 +1723,16 @@ void _bt_handle_device_event(DBusMessage *msg)
 				VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
 
 			__bt_connection_manager_set_state(address, event);
-
+			param = g_variant_new("(is)", result, address);
 			_bt_send_event(BT_HEADSET_EVENT, event,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INVALID);
-
+				param);
 			/* Remove data from the connected list */
 			_bt_remove_headset_from_list(BT_AUDIO_A2DP, address);
 			wait_list = _bt_get_audio_wait_data();
 
 			if (wait_list == NULL) {
 				g_free(address);
+				g_free(profile_uuid);
 				return;
 			}
 
@@ -2075,11 +1757,9 @@ void _bt_handle_device_event(DBusMessage *msg)
 				char connected_address[BT_ADDRESS_STRING_SIZE + 1];
 				bluetooth_device_address_t device_address;
 				gboolean connected;
-
+				param = g_variant_new("(is)", result, address);
 				_bt_send_event(BT_AVRCP_CONTROL_EVENT, event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
+					param);
 				connected = _bt_is_headset_type_connected(
 							BT_AVRCP,
 							connected_address);
@@ -2099,12 +1779,9 @@ void _bt_handle_device_event(DBusMessage *msg)
 						BT_STATE_CONNECTED, address);
 			} else if (state == BT_PROFILE_STATE_DISCONNECTED) {
 				int event = BLUETOOTH_EVENT_AVRCP_CONTROL_DISCONNECTED;
-
+				param = g_variant_new("(is)", result, address);
 				_bt_send_event(BT_AVRCP_CONTROL_EVENT, event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					param);
 				/* Remove data from the connected list */
 				_bt_remove_headset_from_list(BT_AVRCP, address);
 				}
@@ -2113,18 +1790,12 @@ void _bt_handle_device_event(DBusMessage *msg)
 				int event = BLUETOOTH_EVENT_AV_SOURCE_CONNECTED;
 				BT_INFO("A2DP Source is connected");
 				_bt_send_event(BT_A2DP_SOURCE_EVENT, event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
-
+					g_variant_new("(is)", result, address));
 			} else if (state == BT_PROFILE_STATE_DISCONNECTED) {
 				int event = BLUETOOTH_EVENT_AV_SOURCE_DISCONNECTED;
 				BT_INFO("A2DP Source Disconnected");
-
 				_bt_send_event(BT_A2DP_SOURCE_EVENT, event,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &address,
-					DBUS_TYPE_INVALID);
+						g_variant_new("(is)", result, address));
 			}
 		} else if ((strcmp(profile_uuid, HID_UUID) == 0) &&
 			((state == BT_PROFILE_STATE_CONNECTED) ||
@@ -2134,53 +1805,73 @@ void _bt_handle_device_event(DBusMessage *msg)
 				event = BLUETOOTH_HID_CONNECTED;
 			else
 				event = BLUETOOTH_HID_DISCONNECTED;
-
+			param = g_variant_new("(is)", result, address);
 			_bt_send_event(BT_HID_EVENT, event,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INVALID);
+				param);
+
+			if (state == BT_PROFILE_STATE_CONNECTED)
+				__bt_set_device_values(TRUE,
+					VCONFKEY_BT_DEVICE_HID_CONNECTED);
+			else
+				__bt_set_device_values(FALSE,
+					VCONFKEY_BT_DEVICE_HID_CONNECTED);
 		}
 		g_free(address);
+		g_free(profile_uuid);
 	} else if (strcasecmp(member, "AdvReport") == 0) {
 
 		bt_remote_le_dev_info_t *le_dev_info = NULL;
 		char *buffer = NULL;
 		int buffer_len = 0;
 		bt_le_adv_info_t *adv_info = NULL;
-
+		GVariant *value = NULL;
 		ret_if(_bt_is_le_scanning() == FALSE);
 
 		le_dev_info = g_malloc0(sizeof(bt_remote_le_dev_info_t));
-
-		if (!dbus_message_get_args(msg, NULL,
-				DBUS_TYPE_STRING, &le_dev_info->address,
-				DBUS_TYPE_BYTE, &le_dev_info->addr_type,
-				DBUS_TYPE_BYTE, &le_dev_info->adv_type,
-				DBUS_TYPE_INT32, &le_dev_info->rssi,
-				DBUS_TYPE_INT32, &le_dev_info->adv_data_len,
-				DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE, &buffer, &buffer_len,
-				DBUS_TYPE_INVALID)) {
-			g_free(le_dev_info);
+		if (le_dev_info == NULL)
 			return;
-		}
+
+		g_variant_get(msg, "(syyii@ay)", &le_dev_info->address,
+						&le_dev_info->addr_type,
+						&le_dev_info->adv_type,
+						&le_dev_info->rssi,
+						&le_dev_info->adv_data_len,
+						&value);
+		buffer_len = g_variant_get_size(value);
+		if (buffer_len > 0)
+			buffer = (char *)g_variant_get_data(value);
 
 		le_dev_info->adv_data = g_memdup(buffer, buffer_len);
+		if (le_dev_info->adv_data == NULL) {
+			_bt_free_le_device_info(le_dev_info);
+			g_variant_unref(value);
+			return;
+		}
 
 		if (_bt_get_le_scan_type() == BT_LE_PASSIVE_SCAN) {
 			_bt_send_scan_result_event(le_dev_info, NULL);
 			_bt_free_le_device_info(le_dev_info);
+			g_variant_unref(value);
 			return;
 		}
 
 		if (le_dev_info->adv_type != BT_LE_ADV_SCAN_RSP) {       /* ADV_IND */
 			adv_info = g_malloc0(sizeof(bt_le_adv_info_t));
+			if (adv_info == NULL) {
+				_bt_free_le_device_info(le_dev_info);
+				g_variant_unref(value);
+				return;
+			}
+
 			adv_info->addr = g_strdup(le_dev_info->address);
 			adv_info->data_len = le_dev_info->adv_data_len;
 			adv_info->data = g_malloc0(le_dev_info->adv_data_len);
-			memcpy(adv_info->data, le_dev_info->adv_data,
-					le_dev_info->adv_data_len);
+			if (adv_info->data) {
+				memcpy(adv_info->data, le_dev_info->adv_data,
+						le_dev_info->adv_data_len);
 
-			__bt_add_adv_ind_info(adv_info);
+				__bt_add_adv_ind_info(adv_info);
+			}
 
 		} else {     /* SCAN_RSP */
 			adv_info = __bt_get_adv_ind_info(le_dev_info->address);
@@ -2190,7 +1881,25 @@ void _bt_handle_device_event(DBusMessage *msg)
 			}
 		}
 		_bt_free_le_device_info(le_dev_info);
+		g_variant_unref(value);
+	} else if  (strcasecmp(member, "LEDataLengthChanged") == 0) {
+		int tx_octets = 0;
+		int tx_time = 0;
+		int rx_octets = 0;
+		int rx_time = 0;
+
+		g_variant_get(msg, "(qqqq)",
+				tx_octets, tx_time, rx_octets, rx_time);
+
+		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+		_bt_convert_device_path_to_address(path, address);
+
+		param = g_variant_new("(isqqqq)", result, address, tx_octets, tx_time,
+				rx_octets, rx_time);
+		_bt_send_event(BT_DEVICE_EVENT, BLUETOOTH_EVENT_LE_DATA_LENGTH_CHANGED, param);
+		g_free(address);
 	}
+
 }
 
 void __bt_set_audio_values(gboolean connected, char *address)
@@ -2240,41 +1949,24 @@ void __bt_set_audio_values(gboolean connected, char *address)
 	}
 }
 
-void _bt_handle_headset_event(DBusMessage *msg)
+void _bt_handle_headset_event(GVariant *msg, const char *path)
 {
 	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter value_iter;
 	gboolean property_flag = FALSE;
-	const char *member = dbus_message_get_member(msg);
-	const char *path = dbus_message_get_path(msg);
-	const char *property = NULL;
-
-	ret_if(member == NULL);
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, &property);
+	char *property = NULL;
+	GVariant *value = NULL;
+	GVariant *param = NULL;
+	g_variant_get(msg, "(sv)", &property, &value);
 
 	ret_if(property == NULL);
 
 	BT_DBG("Property = %s \n", property);
-
 	/* We allow only 1 headset connection (HSP or HFP)*/
 	if (strcasecmp(property, "Connected") == 0) {
 		int event = BLUETOOTH_EVENT_NONE;
 		bt_headset_wait_t *wait_list;
 		char *address;
-
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &property_flag);
+		g_variant_get(value, "b", &property_flag);
 
 		address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
@@ -2302,11 +1994,9 @@ void _bt_handle_headset_event(DBusMessage *msg)
 		/* Set the State machine here */
 		__bt_connection_manager_set_state(address, event);
 		__bt_set_audio_values(property_flag, address);
-
+		param = g_variant_new("(is)", result, address);
 		_bt_send_event(BT_HEADSET_EVENT, event,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_INVALID);
+			param);
 
 		if (event == BLUETOOTH_EVENT_AG_DISCONNECTED) {
 			/* Remove data from the connected list */
@@ -2344,9 +2034,7 @@ void _bt_handle_headset_event(DBusMessage *msg)
 	} else if (strcasecmp(property, "State") == 0) {
 		char *state = NULL;
 
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &state);
+		g_variant_get(value, "s", &state);
 
 		/* This code assumes we support only 1 headset connection */
 		/* Need to use the headset list, if we support multi-headsets */
@@ -2357,8 +2045,10 @@ void _bt_handle_headset_event(DBusMessage *msg)
 			BT_DBG("connected/disconnected: Sco Disconnected");
 		} else {
 			BT_ERR("Not handled state - %s", state);
+			g_free(state);
 			return;
 		}
+		g_free(state);
 	} else if (strcasecmp(property, "SpeakerGain") == 0) {
 		guint16 spkr_gain;
 		char *address;
@@ -2367,15 +2057,10 @@ void _bt_handle_headset_event(DBusMessage *msg)
 
 		_bt_convert_device_path_to_address(path, address);
 
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &spkr_gain);
-
+		g_variant_get(value, "i", &spkr_gain);
+		param = g_variant_new("(isq)", result, address, spkr_gain);
 		_bt_send_event(BT_HEADSET_EVENT, BLUETOOTH_EVENT_AG_SPEAKER_GAIN,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_UINT16, &spkr_gain,
-			DBUS_TYPE_INVALID);
+			param);
 
 		g_free(address);
 	} else if (strcasecmp(property, "MicrophoneGain") == 0) {
@@ -2386,158 +2071,148 @@ void _bt_handle_headset_event(DBusMessage *msg)
 
 		_bt_convert_device_path_to_address(path, address);
 
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &mic_gain);
-
+		g_variant_get(value, "i", &mic_gain);
+		param = g_variant_new("(isq)", result, address, mic_gain);
 		_bt_send_event(BT_HEADSET_EVENT, BLUETOOTH_EVENT_AG_MIC_GAIN,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_UINT16, &mic_gain,
-			DBUS_TYPE_INVALID);
-
+			param);
 		g_free(address);
 	}
-}
 
-void _bt_handle_sink_event(DBusMessage *msg)
+	if (property)
+		g_free(property);
+	g_variant_unref(value);
+ }
+
+void _bt_handle_sink_event(GVariant *msg, const char *path)
 {
-	int result = BLUETOOTH_ERROR_NONE;
-	DBusMessageIter item_iter;
-	DBusMessageIter value_iter;
-	const char *member = dbus_message_get_member(msg);
-	const char *path = dbus_message_get_path(msg);
-	const char *property = NULL;
+	GVariantIter value_iter;
+	char *property = NULL;
 
 	bt_headset_wait_t *wait_list;
 
-	ret_if(member == NULL);
+	GVariant *child = NULL;
+	GVariant *val = NULL;
+	GVariant *param = NULL;
+	g_variant_iter_init (&value_iter, msg);
+	while ((child = g_variant_iter_next_value (&value_iter))) {
 
-	dbus_message_iter_init(msg, &item_iter);
+		g_variant_get(child, "{sv}", &property, &val);
 
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-		BT_ERR("This is bad format dbus");
-		return;
-	}
+		ret_if(property == NULL);
 
-	dbus_message_iter_get_basic(&item_iter, &property);
+		BT_DBG("Property = %s \n", property);
 
-	ret_if(property == NULL);
 
-	BT_DBG("Property: %s", property);
+		if (strcasecmp(property, "State") == 0) {
+			int result = BLUETOOTH_ERROR_NONE;
+			char *value;
 
-	if (strcasecmp(property, "State") == 0) {
+			g_variant_get(val, "s", &value);
+			BT_DBG("value: %s", value);
 
-		const char *value;
+			if (g_strcmp0(value, "disconnected") == 0) {
+				char *address;
 
-		dbus_message_iter_next(&item_iter);
-		dbus_message_iter_recurse(&item_iter, &value_iter);
-		dbus_message_iter_get_basic(&value_iter, &value);
+				address = g_malloc0(BT_ADDRESS_STRING_SIZE);
 
-		BT_DBG("value: %s", value);
+				_bt_convert_device_path_to_address(path, address);
 
-		if (g_strcmp0(value, "disconnected") == 0) {
-			char *address;
-
-			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-			_bt_convert_device_path_to_address(path, address);
-
-			__bt_set_device_values(FALSE,
-				VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
-
-			_bt_send_event(BT_HEADSET_EVENT,
-				BLUETOOTH_EVENT_AV_DISCONNECTED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INVALID);
-
-			/* Remove data from the connected list */
-			_bt_remove_headset_from_list(BT_AUDIO_A2DP, address);
-			wait_list = _bt_get_audio_wait_data();
-			if (wait_list == NULL) {
-				g_free(address);
-				return;
-			}
-
-			if (((wait_list->type == BT_AUDIO_ALL) &&
-				(wait_list->ag_flag == TRUE)) ||
-				(wait_list->type == BT_AUDIO_A2DP) ||
-				(wait_list->disconnection_type == BT_AUDIO_A2DP)) {
-				bluetooth_device_address_t device_address;
-				_bt_convert_addr_string_to_type(
-							device_address.addr,
-							wait_list->address);
-
-				_bt_audio_connect(wait_list->req_id,
-							wait_list->type,
-							&device_address,
-							wait_list->out_param1);
-			}
-			g_free(address);
-		}else if (strcasecmp(value, "Connected") == 0) {
-			char *address;
-			char connected_address[BT_ADDRESS_STRING_SIZE + 1];
-			bluetooth_device_address_t device_address;
-			gboolean connected;
-
-			address = g_malloc0(BT_ADDRESS_STRING_SIZE);
-
-			_bt_convert_device_path_to_address(path, address);
-
-			__bt_set_device_values(TRUE,
+				__bt_set_device_values(FALSE,
 					VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
+				param = g_variant_new("(is)", result, address);
+				_bt_send_event(BT_HEADSET_EVENT,
+					BLUETOOTH_EVENT_AV_DISCONNECTED,
+					param);
 
-			_bt_send_event(BT_HEADSET_EVENT,
-				BLUETOOTH_EVENT_AV_CONNECTED,
-				DBUS_TYPE_INT32, &result,
-				DBUS_TYPE_STRING, &address,
-				DBUS_TYPE_INVALID);
-
-			/* Check for existing Media device to disconnect */
-			connected = _bt_is_headset_type_connected(BT_AUDIO_A2DP,
-								connected_address);
-			if (connected) {
-				/* Match connected device address */
-				if (g_strcmp0(connected_address, address) != 0) {
-					/* Convert BD adress from string type */
-					_bt_convert_addr_string_to_type(
-							device_address.addr,
-							connected_address);
-					_bt_audio_disconnect(0, BT_AUDIO_A2DP,
-							&device_address, NULL);
+				/* Remove data from the connected list */
+				_bt_remove_headset_from_list(BT_AUDIO_A2DP, address);
+				wait_list = _bt_get_audio_wait_data();
+				if (wait_list == NULL) {
+					g_free(value);
+					g_free(property);
+					g_variant_unref(val);
+					g_variant_unref(child);
+					g_free(address);
+					return;
 				}
+
+				if (((wait_list->type == BT_AUDIO_ALL) &&
+					(wait_list->ag_flag == TRUE)) ||
+					(wait_list->type == BT_AUDIO_A2DP) ||
+					(wait_list->disconnection_type == BT_AUDIO_A2DP)) {
+					bluetooth_device_address_t device_address;
+					_bt_convert_addr_string_to_type(
+								device_address.addr,
+								wait_list->address);
+
+					_bt_audio_connect(wait_list->req_id,
+								wait_list->type,
+								&device_address,
+								wait_list->out_param1);
+				}
+				g_free(address);
+			}else if (strcasecmp(value, "Connected") == 0) {
+				char *address;
+				char connected_address[BT_ADDRESS_STRING_SIZE + 1];
+				bluetooth_device_address_t device_address;
+				gboolean connected;
+
+				address = g_malloc0(BT_ADDRESS_STRING_SIZE);
+
+				_bt_convert_device_path_to_address(path, address);
+
+				__bt_set_device_values(TRUE,
+						VCONFKEY_BT_DEVICE_A2DP_HEADSET_CONNECTED);
+				param = g_variant_new("(is)", result, address);
+				_bt_send_event(BT_HEADSET_EVENT,
+					BLUETOOTH_EVENT_AV_CONNECTED,
+					param);
+				/* Check for existing Media device to disconnect */
+				connected = _bt_is_headset_type_connected(BT_AUDIO_A2DP,
+									connected_address);
+				if (connected) {
+					/* Match connected device address */
+					if (g_strcmp0(connected_address, address) != 0) {
+						/* Convert BD adress from string type */
+						_bt_convert_addr_string_to_type(
+								device_address.addr,
+								connected_address);
+						_bt_audio_disconnect(0, BT_AUDIO_A2DP,
+								&device_address, NULL);
+					}
+				}
+
+				/* Add data to the connected list */
+				_bt_add_headset_to_list(BT_AUDIO_A2DP,
+						BT_STATE_CONNECTED, address);
+
+				g_free(address);
 			}
-
-			/* Add data to the connected list */
-			_bt_add_headset_to_list(BT_AUDIO_A2DP,
-					BT_STATE_CONNECTED, address);
-
-			g_free(address);
+			g_free(value);
 		}
+		g_free(property);
+		g_variant_unref(val);
+		g_variant_unref(child);
 	}
 }
 
-void _bt_handle_agent_event(DBusMessage *msg)
+void _bt_handle_agent_event(GVariant *msg, const char *member)
 {
-	const char *member = dbus_message_get_member(msg);
 	int result = BLUETOOTH_ERROR_NONE;
 	char *address = NULL;
 	char *name = NULL;
 	char *uuid = NULL;
-
+	GVariant *param = NULL;
 	ret_if(member == NULL);
 
 	if (strcasecmp(member, "ObexAuthorize") == 0) {
 		__bt_get_agent_signal_info(msg, &address, &name, &uuid);
-
+		param = g_variant_new("(iss)", result, address, name);
 		_bt_send_event(BT_OPP_SERVER_EVENT,
 			BLUETOOTH_EVENT_OBEX_SERVER_CONNECTION_AUTHORIZE,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_STRING, &name,
-			DBUS_TYPE_INVALID);
+			param);
+		g_free(address);
+		g_free(name);
 	} else if (strcasecmp(member, "RfcommAuthorize") == 0) {
 		bt_rfcomm_server_info_t *server_info;
 
@@ -2546,129 +2221,24 @@ void _bt_handle_agent_event(DBusMessage *msg)
 		server_info = _bt_rfcomm_get_server_info_using_uuid(uuid);
 		ret_if(server_info == NULL);
 		ret_if(server_info->server_type != BT_CUSTOM_SERVER);
-
+		param = g_variant_new("(isssn)", result, address, uuid, name,
+					server_info->control_fd);
 		_bt_send_event(BT_RFCOMM_SERVER_EVENT,
 			BLUETOOTH_EVENT_RFCOMM_AUTHORIZE,
-			DBUS_TYPE_INT32, &result,
-			DBUS_TYPE_STRING, &address,
-			DBUS_TYPE_STRING, &uuid,
-			DBUS_TYPE_STRING, &name,
-			DBUS_TYPE_INT16, &server_info->control_fd,
-			DBUS_TYPE_INVALID);
+			param);
+		g_free(address);
+		g_free(uuid);
+		g_free(name);
 	}
 }
 
-static int __bt_get_object_path(DBusMessage *msg, char **path)
+static int __bt_get_object_path(GVariant *msg, char **path)
 {
-	DBusMessageIter item_iter;
-
-	dbus_message_iter_init(msg, &item_iter);
-
-	if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_OBJECT_PATH) {
-		BT_ERR("This is bad format dbus");
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	dbus_message_iter_get_basic(&item_iter, path);
-
+	g_variant_get(msg, "(o*)", path, NULL);
 	if (*path == NULL)
 		return BLUETOOTH_ERROR_INTERNAL;
 
 	return BLUETOOTH_ERROR_NONE;
-}
-
-static int __bt_parse_event(DBusMessage *msg)
-{
-	DBusMessageIter msg_iter;
-	DBusMessageIter value_iter;
-
-	retv_if(dbus_message_iter_init(msg, &msg_iter) == FALSE, 0);
-
-	/* object array (oa) */
-	retv_if(dbus_message_iter_next(&msg_iter) == FALSE, 0);
-	retv_if(dbus_message_iter_get_arg_type(&msg_iter) !=
-					DBUS_TYPE_ARRAY, 0);
-
-	dbus_message_iter_recurse(&msg_iter, &value_iter);
-
-	/* string array (sa) */
-	while (dbus_message_iter_get_arg_type(&value_iter) ==
-					DBUS_TYPE_DICT_ENTRY) {
-		char *interface_name = NULL;
-		DBusMessageIter interface_iter;
-
-		dbus_message_iter_recurse(&value_iter, &interface_iter);
-
-		retv_if(dbus_message_iter_get_arg_type(&interface_iter) !=
-						DBUS_TYPE_STRING, 0);
-
-		dbus_message_iter_get_basic(&interface_iter,
-						&interface_name);
-
-                retv_if(dbus_message_iter_next(&interface_iter) == FALSE,
-								0);
-
-		retv_if(dbus_message_iter_get_arg_type(&interface_iter) !=
-					DBUS_TYPE_ARRAY, 0);
-
-		BT_DBG("interface: %s", interface_name);
-
-		if (g_strcmp0(interface_name,
-				BT_DEVICE_INTERFACE) == 0) {
-			return BT_DEVICE_EVENT;
-		} else if (g_strcmp0(interface_name,
-				BT_MEDIATRANSPORT_INTERFACE) == 0) {
-			return BT_MEDIA_TRANSFER_EVENT;
-		} else if (g_strcmp0(interface_name,
-				BT_PLAYER_CONTROL_INTERFACE) == 0) {
-			return BT_AVRCP_CONTROL_EVENT;
-		}
-		dbus_message_iter_next(&value_iter);
-	}
-
-	return 0;
-}
-
-static int __bt_parse_remove_event(DBusMessage *msg)
-{
-	DBusMessageIter msg_iter;
-	DBusMessageIter value_iter;
-
-	retv_if(dbus_message_iter_init(msg, &msg_iter) ==
-					FALSE, 0);
-
-	retv_if(dbus_message_iter_next(&msg_iter) == FALSE,
-						0);
-	retv_if(dbus_message_iter_get_arg_type(&msg_iter) !=
-					DBUS_TYPE_ARRAY, 0);
-
-	dbus_message_iter_recurse(&msg_iter, &value_iter);
-
-	while (dbus_message_iter_get_arg_type(&value_iter)
-					!= DBUS_TYPE_INVALID) {
-		char *key;
-
-		dbus_message_iter_get_basic(&value_iter, &key);
-
-		if (key == NULL) {
-			dbus_message_iter_next(&value_iter);
-			continue;
-		}
-
-		BT_DBG("key = %s", key);
-
-		if (g_strcmp0(key, BT_MEDIATRANSPORT_INTERFACE) == 0) {
-			return BT_MEDIA_TRANSFER_EVENT;
-		} else if (g_strcmp0(key, BT_DEVICE_INTERFACE) == 0) {
-			return BT_DEVICE_EVENT;
-		} else if (g_strcmp0(key, BT_PLAYER_CONTROL_INTERFACE) == 0) {
-			return BT_AVRCP_CONTROL_EVENT;
-		}
-		dbus_message_iter_next(&value_iter);
-	}
-
-	return 0;
 }
 
 static void __bt_devices_list_free(void)
@@ -2680,7 +2250,6 @@ static void __bt_devices_list_free(void)
 
 	while (node != NULL){
 		cache_info = (bt_cache_info_t *)node->data;
-
 		p_cache_list = g_list_remove(p_cache_list, cache_info);
 		__bt_free_cache_info(cache_info);
 
@@ -2688,53 +2257,90 @@ static void __bt_devices_list_free(void)
 	}
 }
 
-static DBusHandlerResult __bt_manager_event_filter(DBusConnection *conn,
-					   DBusMessage *msg, void *data)
+static int __bt_parse_event(GVariant *msg)
 {
-	const char *member = dbus_message_get_member(msg);
-	bt_event_type_t bt_event;
-	int result = BLUETOOTH_ERROR_NONE;
+	GVariantIter iter;
+	GVariant *child;
+	char *interface_name= NULL;
+	GVariant *inner_iter = NULL;
 
-	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	g_variant_iter_init(&iter, msg);
 
-	retv_if(member == NULL, DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
-
-	if (strcasecmp(member, "InterfacesAdded") == 0) {
-		char *object_path = NULL;
-
-		BT_DBG("InterfacesAdded");
-
-		if (__bt_get_object_path(msg, &object_path)) {
-			BT_ERR("Fail to get the path");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	while ((child = g_variant_iter_next_value(&iter))) {
+		g_variant_get(child,"{&s@a{sv}}", &interface_name, &inner_iter);
+		if (g_strcmp0(interface_name,
+				BT_DEVICE_INTERFACE) == 0) {
+			g_variant_unref(inner_iter);
+			g_variant_unref(child);
+			return BT_DEVICE_EVENT;
+		} else if (g_strcmp0(interface_name,
+				BT_MEDIATRANSPORT_INTERFACE) == 0) {
+			g_variant_unref(inner_iter);
+			g_variant_unref(child);
+			return BT_MEDIA_TRANSFER_EVENT;
+		} else if (g_strcmp0(interface_name,
+				BT_PLAYER_CONTROL_INTERFACE) == 0) {
+			g_variant_unref(inner_iter);
+			g_variant_unref(child);
+			return BT_AVRCP_CONTROL_EVENT;
 		}
+		g_variant_unref(inner_iter);
+		g_variant_unref(child);
+	}
 
-		if (strcasecmp(object_path, BT_BLUEZ_HCI_PATH) == 0) {
+	return 0;
+}
+
+static  void __bt_manager_event_filter(GDBusConnection *connection,
+					const gchar *sender_name,
+					const gchar *object_path,
+					const gchar *interface_name,
+					const gchar *signal_name,
+					GVariant *parameters,
+					gpointer user_data)
+{
+	bt_event_type_t bt_event = 0x00;
+	int result = BLUETOOTH_ERROR_NONE;
+	GVariant *value;
+	char *obj_path = NULL;
+	GVariant *param = NULL;
+	if (signal_name == NULL)
+		return;
+	if (strcasecmp(signal_name, "InterfacesAdded") == 0) {
+		g_variant_get(parameters, "(&o@a{sa{sv}})", &obj_path, &value);
+
+		if (strcasecmp(obj_path, BT_BLUEZ_HCI_PATH) == 0) {
+#ifdef USB_BLUETOOTH
+			_bt_enable_adapter();
+#else
 			_bt_handle_adapter_added();
-		} else {
-			bt_event = __bt_parse_event(msg);
+#endif
+		}
+		else {
+			bt_event = __bt_parse_event(value);
 			if (bt_event == BT_DEVICE_EVENT) {
 				bt_cache_info_t *cache_info;
 				bt_remote_dev_info_t *dev_info;
 
-				retv_if(_bt_is_discovering() == FALSE &&
-						_bt_is_le_scanning() == FALSE,
-							DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
+				ret_if(_bt_is_discovering() == FALSE &&
+						_bt_is_le_scanning() == FALSE);
 
 				cache_info = g_malloc0(sizeof(bt_cache_info_t));
+				ret_if(cache_info == NULL);
+
 				dev_info = g_malloc0(sizeof(bt_remote_dev_info_t));
-				/* Fix : NULL_RETURNS */
-				if (cache_info == NULL || dev_info == NULL) {
-					BT_ERR("Fail to allocate memory");
-					return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+				if (dev_info == NULL) {
+					__bt_free_cache_info(cache_info);
+					return;
 				}
+
 				cache_info->dev_info = dev_info;
 
-				if (__bt_parse_interface(msg, dev_info) == FALSE) {
+				if (__bt_parse_interface(parameters, dev_info) == FALSE) {
 					BT_ERR("Fail to parse the properies");
 					__bt_free_cache_info(cache_info);
-					return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+					g_variant_unref(value);
+					return;
 				}
 
 				if (dev_info->addr_type != BDADDR_BREDR) {
@@ -2742,7 +2348,8 @@ static DBusHandlerResult __bt_manager_event_filter(DBusConnection *conn,
 						some property doesn't reach to bt-service.
 						So LE device is handled as AdvReport signal */
 					__bt_free_cache_info(cache_info);
-					return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+					g_variant_unref(value);
+					return;
 				}
 
 				if (dev_info->name == NULL)
@@ -2751,55 +2358,80 @@ static DBusHandlerResult __bt_manager_event_filter(DBusConnection *conn,
 					 */
 					dev_info->name = g_strdup(dev_info->address);
 
+				GVariant *uuids = NULL;
+				GVariantBuilder *builder = NULL;
+				int i = 0;
+				builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+				for (i=0; i < dev_info->uuid_count; i++) {
+					g_variant_builder_add(builder, "s",
+						dev_info->uuids[i]);
+				}
+				uuids = g_variant_new("as", builder);
+				g_variant_builder_unref(builder);
+				GVariant *manufacturer_data = NULL;
+				manufacturer_data = g_variant_new_from_data(
+							G_VARIANT_TYPE_BYTESTRING,
+							dev_info->manufacturer_data,
+							dev_info->manufacturer_data_len,
+							TRUE, NULL, NULL);
+				param = g_variant_new("(isunsbub@asn@ay)", result,
+							dev_info->address,
+							dev_info->class,
+							dev_info->rssi,
+							dev_info->name,
+							dev_info->paired,
+							dev_info->connected,
+							dev_info->trust,
+							uuids,
+							dev_info->manufacturer_data_len,
+							manufacturer_data);
 				_bt_send_event(BT_ADAPTER_EVENT,
 					BLUETOOTH_EVENT_REMOTE_DEVICE_FOUND,
-					DBUS_TYPE_INT32, &result,
-					DBUS_TYPE_STRING, &dev_info->address,
-					DBUS_TYPE_UINT32, &dev_info->class,
-					DBUS_TYPE_INT16, &dev_info->rssi,
-					DBUS_TYPE_STRING, &dev_info->name,
-					DBUS_TYPE_BOOLEAN, &dev_info->paired,
-					DBUS_TYPE_UINT32, &dev_info->connected,
-					DBUS_TYPE_BOOLEAN, &dev_info->trust,
-					DBUS_TYPE_ARRAY, DBUS_TYPE_STRING,
-					&dev_info->uuids, dev_info->uuid_count,
-					DBUS_TYPE_INT16, &dev_info->manufacturer_data_len,
-					DBUS_TYPE_ARRAY, DBUS_TYPE_BYTE,
-					&dev_info->manufacturer_data, dev_info->manufacturer_data_len,
-					DBUS_TYPE_INVALID);
-
+					 param);
 				p_cache_list = g_list_append(p_cache_list, cache_info);
 			} else if (bt_event == BT_AVRCP_CONTROL_EVENT) {
-				BT_DBG("Device path : %s ", object_path);
-				_bt_set_control_device_path(object_path);
+				BT_DBG("Device path : %s ", obj_path);
+				_bt_set_control_device_path(obj_path);
 			}
 		}
-	} else if (strcasecmp(member, "InterfacesRemoved") == 0) {
-		bt_event = __bt_parse_remove_event(msg);
-
+		g_variant_unref(value);
+	} else if (strcasecmp(signal_name, "InterfacesRemoved") == 0) {
+#ifdef USB_BLUETOOTH
+		_bt_handle_adapter_removed();
+#endif
+		if (g_strcmp0(interface_name, BT_MEDIATRANSPORT_INTERFACE) == 0) {
+			bt_event = BT_MEDIA_TRANSFER_EVENT;
+		} else if (g_strcmp0(interface_name, BT_DEVICE_INTERFACE) == 0) {
+			bt_event = BT_DEVICE_EVENT;
+		} else if (g_strcmp0(interface_name, BT_PLAYER_CONTROL_INTERFACE) == 0) {
+			bt_event = BT_AVRCP_CONTROL_EVENT;
+		}
 		if ((bt_event != 0) && (bt_event != BT_MEDIA_TRANSFER_EVENT)) {
-			_bt_handle_adapter_event(msg);
+			_bt_handle_adapter_event(parameters, signal_name);
 			if (bt_event == BT_AVRCP_CONTROL_EVENT) {
-				char *object_path = NULL;
-				result = __bt_get_object_path(msg, &object_path);
-				if (result == BLUETOOTH_ERROR_NONE)
-					_bt_remove_control_device_path(object_path);
+				BT_INFO("Object Path %s", obj_path);
+				_bt_remove_control_device_path(obj_path);
 			}
 		}
-
-	} else if (strcasecmp(member, "NameOwnerChanged") == 0) {
+	} else if (strcasecmp(signal_name, "NameOwnerChanged") == 0) {
 		gboolean value;
 		char *name = NULL;
 		char *previous = NULL;
 		char *current = NULL;
 
-		if (__bt_get_owner_info(msg, &name, &previous, &current)) {
+		if (__bt_get_owner_info(parameters, &name, &previous, &current)) {
 			BT_ERR("Fail to get the owner info");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
 
-		if (*current != '\0')
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		if (*current != '\0') {
+			g_free(current);
+			if (name)
+				g_free(name);
+			if (previous)
+				g_free(previous);
+			return;
+		}
 
 		if (strcasecmp(name, BT_BLUEZ_NAME) == 0) {
 			BT_DBG("Bluetoothd is terminated");
@@ -2828,65 +2460,44 @@ static DBusHandlerResult __bt_manager_event_filter(DBusConnection *conn,
 		_bt_stop_advertising_by_terminated_process(name);
 		/* Stop LE Scan */
 		_bt_stop_le_scan(name);
-	} else	if (dbus_message_has_interface(msg, BT_PROPERTIES_INTERFACE)) {
-		const char *path = dbus_message_get_path(msg);
+		g_free(name);
+		g_free(previous);
+		g_free(current);
+	} else if (g_strcmp0(interface_name, BT_PROPERTIES_INTERFACE) == 0) {
+		const char *path = object_path;
 
 		if (strncmp(path, BT_MEDIA_OBJECT_PATH,
 				strlen(BT_MEDIA_OBJECT_PATH)) == 0)
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 
-		_bt_handle_property_changed_event(msg);
-	} else  if (dbus_message_has_interface(msg, BT_ADAPTER_INTERFACE)) {
-		_bt_handle_adapter_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_INPUT_INTERFACE)) {
-		_bt_handle_input_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_NETWORK_SERVER_INTERFACE)) {
-		_bt_handle_network_server_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_HEADSET_INTERFACE)) {
-		_bt_handle_headset_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_SINK_INTERFACE)) {
-		_bt_handle_sink_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_AGENT_INTERFACE)) {
-		_bt_handle_agent_event(msg);
-	} else	if (dbus_message_has_interface(msg, BT_DEVICE_INTERFACE)) {
-		_bt_handle_device_event(msg);
+		_bt_handle_property_changed_event(parameters, object_path);
+	} else if (g_strcmp0(interface_name, BT_ADAPTER_INTERFACE) == 0) {
+		_bt_handle_adapter_event(parameters, signal_name);
+	} else if (g_strcmp0(interface_name, BT_INPUT_INTERFACE) == 0) {
+		_bt_handle_input_event(parameters, object_path);
+	} else if (g_strcmp0(interface_name, BT_NETWORK_SERVER_INTERFACE) == 0) {
+		_bt_handle_network_server_event(parameters, signal_name);
+	} else if (g_strcmp0(interface_name, BT_HEADSET_INTERFACE) == 0) {
+		_bt_handle_headset_event(parameters, object_path);
+	} else if (g_strcmp0(interface_name, BT_SINK_INTERFACE) == 0) {
+		_bt_handle_sink_event(parameters, object_path);
+	} else if (g_strcmp0(interface_name, BT_AGENT_INTERFACE) == 0) {
+		_bt_handle_agent_event(parameters, signal_name);
+	} else if (g_strcmp0(interface_name, BT_DEVICE_INTERFACE) == 0) {
+		_bt_handle_device_event(parameters, signal_name, object_path);
 	}
 
-	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	return;
 }
 
-static gboolean __bt_is_obexd_event(DBusMessage *msg)
+static gboolean __bt_is_obexd_event(GVariant *msg, const char *interface)
 {
-	const char *member = dbus_message_get_member(msg);
 
-	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
-		return FALSE;
+	if (g_strcmp0(interface, BT_PROPERTIES_INTERFACE) == 0) {
+		char *interface_name = NULL;
 
-	retv_if(member == NULL, FALSE);
-
-	if (dbus_message_has_interface(msg, BT_PROPERTIES_INTERFACE)) {
-
-		DBusMessageIter item_iter;
-		const char *interface_name = NULL;
-
-		dbus_message_iter_init(msg, &item_iter);
-
-		if (dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_STRING) {
-			BT_ERR("This is bad format dbus");
-			return FALSE;
-                }
-
-		dbus_message_iter_get_basic(&item_iter, &interface_name);
-
+		g_variant_get(msg,"(&s@a{sv}@as)", &interface_name, NULL, NULL);
 		retv_if(interface_name == NULL, FALSE);
-
-		BT_DBG("interface: %s", interface_name);
-
-		retv_if(dbus_message_iter_next(&item_iter) == FALSE, FALSE);
-
-		retv_if(dbus_message_iter_get_arg_type(&item_iter) != DBUS_TYPE_ARRAY,
-									FALSE);
 
 		if (strcasecmp(interface_name, BT_OBEX_TRANSFER_INTERFACE) == 0) {
 			BT_DBG("BT_OBEX_TRANSFER_INTERFACE");
@@ -2897,109 +2508,89 @@ static gboolean __bt_is_obexd_event(DBusMessage *msg)
 	return FALSE;
 }
 
-static DBusHandlerResult __bt_obexd_event_filter(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+static  void __bt_obexd_event_filter(GDBusConnection *connection,
+					const gchar *sender_name,
+					const gchar *object_path,
+					const gchar *interface_name,
+					const gchar *signal_name,
+					GVariant *parameters,
+					gpointer user_data)
 {
-	const char *member = dbus_message_get_member(msg);
-	char *object_path = NULL;
-
-	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-
-	retv_if(member == NULL, DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
+	const char *member = signal_name;
+	char *obj_path = NULL;
+	ret_if(member == NULL);
 
 	if (strcasecmp(member, "InterfacesAdded") == 0) {
-		BT_DBG("InterfacesAdded");
-		if (__bt_get_object_path(msg, &object_path)) {
+		if (__bt_get_object_path(parameters, &obj_path)) {
 			BT_ERR("Fail to get the path");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
-
 		BT_INFO("object_path = [%s]", object_path);
 
 		/*Handle OPP_SERVER_CONNECTED_EVENT here */
-		if (strncmp(object_path, BT_SESSION_BASEPATH_SERVER,
-				strlen(BT_SESSION_BASEPATH_SERVER)) != 0)
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		if (strncmp(obj_path, BT_SESSION_BASEPATH_SERVER,
+				strlen(BT_SESSION_BASEPATH_SERVER)) != 0) {
+			g_free(obj_path);
+			return;
+		}
 
-		if (g_strrstr(object_path, "session") && g_strrstr(object_path, "transfer")) {
+		if (g_strrstr(obj_path, "session") && g_strrstr(obj_path, "transfer")) {
 			BT_DBG("Obex_Server_Session_Transfer connected");
 			_bt_obex_transfer_connected();
 		}
+		g_free(obj_path);
 	} else if (strcasecmp(member, "InterfacesRemoved") == 0) {
 		/*Handle OPP_SERVER_DISCONNECTED_EVENT here */
-		BT_DBG("InterfacesRemoved");
-		if (__bt_get_object_path(msg, &object_path)) {
+		if (__bt_get_object_path(parameters, &obj_path)) {
 			BT_ERR("Fail to get the path");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
-
 		BT_INFO("object_path = [%s]", object_path);
 
-		if (strncmp(object_path, BT_SESSION_BASEPATH_CLIENT,
+		if (strncmp(obj_path, BT_SESSION_BASEPATH_CLIENT,
 				strlen(BT_SESSION_BASEPATH_CLIENT)) == 0) {
 			BT_DBG("Call PBAP Disconnected");
-			_bt_obex_pbap_client_disconnect(object_path);
+			_bt_obex_pbap_client_disconnect(obj_path);
 		}
 
-		if (strncmp(object_path, BT_SESSION_BASEPATH_SERVER,
-				strlen(BT_SESSION_BASEPATH_SERVER)) != 0)
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		if (strncmp(obj_path, BT_SESSION_BASEPATH_SERVER,
+				strlen(BT_SESSION_BASEPATH_SERVER)) != 0) {
+			g_free(obj_path);
+			return;
+		}
 
-		if (g_strrstr(object_path, "session") && g_strrstr(object_path, "transfer")) {
+		if (g_strrstr(obj_path, "session") && g_strrstr(obj_path, "transfer")) {
 			BT_DBG("Obex_Server_Session_Transfer disconnected");
 			_bt_obex_transfer_disconnected();
 		}
-	} else if (__bt_is_obexd_event(msg) == TRUE) {
-		const char *path = dbus_message_get_path(msg);
+		g_free(obj_path);
+	} else if (__bt_is_obexd_event(parameters, interface_name) == TRUE) {
+		const char *path = object_path;
 
 		if (strncmp(path, BT_SESSION_BASEPATH_SERVER,
 				strlen(BT_SESSION_BASEPATH_SERVER)) != 0 &&
 			strncmp(path, BT_SESSION_BASEPATH_CLIENT,
 				strlen(BT_SESSION_BASEPATH_CLIENT)) != 0) {
 			BT_DBG("DBUS_HANDLER_RESULT_NOT_YET_HANDLED");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
 
-		_bt_handle_property_changed_event(msg);
+		_bt_handle_property_changed_event(parameters, path);
 	}
-	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	BT_DBG("-");
+	return;
 }
 
-static gboolean __bt_is_obexd_client_event(DBusMessage *msg)
+static gboolean __bt_is_obexd_client_event(GVariant *msg, const char *interface)
 {
 	BT_DBG("+");
 
-	const char *member = dbus_message_get_member(msg);
+	if (g_strcmp0(interface, BT_PROPERTIES_INTERFACE) == 0) {
+		char *interface_name = NULL;
 
-	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
-		return FALSE;
-
-	retv_if(member == NULL, DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
-
-	if (dbus_message_has_interface(msg, BT_PROPERTIES_INTERFACE)) {
-		DBusMessageIter item_iter;
-		const char *interface_name = NULL;
-
-		dbus_message_iter_init(msg, &item_iter);
-
-		if (dbus_message_iter_get_arg_type(&item_iter)
-						!= DBUS_TYPE_STRING) {
-			BT_ERR("This is bad format dbus");
-			return FALSE;
-		}
-
-		dbus_message_iter_get_basic(&item_iter, &interface_name);
+		g_variant_get(msg,"(&s@a{sv}@as)", &interface_name, NULL, NULL);
 
 		retv_if(interface_name == NULL, FALSE);
-
-		BT_DBG("interface: %s", interface_name);
-
-		retv_if(dbus_message_iter_next(&item_iter) == FALSE,
-								FALSE);
-
-		retv_if(dbus_message_iter_get_arg_type(&item_iter)
-					!= DBUS_TYPE_ARRAY, FALSE);
 
 		if (strcasecmp(interface_name,
 					BT_OBEX_TRANSFER_INTERFACE) == 0) {
@@ -3013,55 +2604,54 @@ static gboolean __bt_is_obexd_client_event(DBusMessage *msg)
 	return FALSE;
 }
 
-static DBusHandlerResult __bt_opc_event_filter(DBusConnection *conn,
-						DBusMessage *msg, void *data)
+static  void __bt_opc_event_filter(GDBusConnection *connection,
+					const gchar *sender_name,
+					const gchar *object_path,
+					const gchar *interface_name,
+					const gchar *signal_name,
+					GVariant *parameters,
+					gpointer user_data)
 {
-	const char *member = dbus_message_get_member(msg);
-
-	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
-		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-
-	retv_if(member == NULL, DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
-
+	const char *member = signal_name;
+	char *obj_path = NULL;
 	if (strcasecmp(member, "InterfacesAdded") == 0) {
 		BT_DBG("InterfacesAdded");
 	}else if (strcasecmp(member, "InterfacesRemoved") == 0) {
-		char *object_path = NULL;
 
-		BT_DBG("InterfacesRemoved");
-
-		if (__bt_get_object_path(msg, &object_path)) {
+		if (__bt_get_object_path(parameters, &obj_path)) {
 			BT_ERR("Fail to get the path");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
 
-		BT_DBG("object_path =%s",object_path);
+		BT_DBG("object_path =%s",obj_path);
 
-		if (strncmp(object_path, BT_SESSION_BASEPATH_CLIENT,
+		if (strncmp(obj_path, BT_SESSION_BASEPATH_CLIENT,
 				strlen(BT_SESSION_BASEPATH_CLIENT)) != 0
-				|| strstr(object_path, "transfer") == NULL)
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		else if (strncmp(object_path, BT_SESSION_BASEPATH_CLIENT,
+				|| strstr(obj_path, "transfer") == NULL) {
+			g_free(obj_path);
+			return;
+		}
+		else if (strncmp(obj_path, BT_SESSION_BASEPATH_CLIENT,
 				strlen(BT_SESSION_BASEPATH_CLIENT)) == 0) {
 			BT_DBG("Going to call opc disconnected");
-			_bt_opc_disconnected(object_path);
+			_bt_opc_disconnected(obj_path);
 		}
 
 		_bt_sending_files();
-
-	}else if (__bt_is_obexd_client_event(msg) == TRUE){
-		const char *path = dbus_message_get_path(msg);
-
+		g_free(obj_path);
+	}else if (__bt_is_obexd_client_event(parameters, interface_name) == TRUE){
+		char *path = (char *)object_path;
+		BT_INFO("object_path %s", path);
 		if (strncmp(path, BT_SESSION_BASEPATH_CLIENT,
 			strlen(BT_SESSION_BASEPATH_CLIENT)) != 0) {
 			BT_DBG("NOT BT_SESSION_BASEPATH_CLIENT");
-			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+			return;
 		}
 
-		_bt_opc_property_changed_event(msg);
+		_bt_opc_property_changed_event(parameters, path);
 	}
 
-	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	return;
 }
 
 int _bt_opp_client_event_init(void)
@@ -3069,22 +2659,22 @@ int _bt_opp_client_event_init(void)
 	GError *error = NULL;
 
 	if (opc_obexd_conn == NULL) {
-		opc_obexd_conn = dbus_g_bus_get(DBUS_BUS_SESSION, &error);
-		if (error != NULL) {
-			BT_ERR("ERROR: Can't get on session bus [%s]",
-							 error->message);
-			g_error_free(error);
-			return BLUETOOTH_ERROR_INTERNAL;
-		}
+		opc_obexd_conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
 
-		retv_if(opc_obexd_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
+		if (!opc_obexd_conn) {
+			if (error) {
+				BT_ERR("Unable to connect to dbus: %s", error->message);
+				g_clear_error(&error);
+			}
+		return BLUETOOTH_ERROR_INTERNAL;
+		}
 	}
 
 	if (_bt_register_service_event(opc_obexd_conn,
 			BT_OPP_CLIENT_EVENT) != BLUETOOTH_ERROR_NONE) {
-		dbus_g_connection_unref(opc_obexd_conn);
-		opc_obexd_conn = NULL;
-		return BLUETOOTH_ERROR_INTERNAL;
+			g_object_unref(opc_obexd_conn);
+			opc_obexd_conn = NULL;
+			return BLUETOOTH_ERROR_INTERNAL;
 	}
 
 	return BLUETOOTH_ERROR_NONE;
@@ -3095,205 +2685,431 @@ void _bt_opp_client_event_deinit(void)
 	if (opc_obexd_conn) {
 		_bt_unregister_service_event(opc_obexd_conn,
 						BT_OPP_CLIENT_EVENT);
-		dbus_g_connection_unref(opc_obexd_conn);
-		opc_obexd_conn = NULL;
+		 g_object_unref(opc_obexd_conn);
+		 opc_obexd_conn = NULL;
 	}
 }
 
-int _bt_register_service_event(DBusGConnection *g_conn, int event_type)
+int _bt_register_manager_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_interface_added_id = -1;
+	static int subs_interface_removed_id = -1;
+	static int subs_name_owner_id = -1;
+	static int subs_property_id = -1;
+	static int subs_adapter_id = -1;
+
+	if (subscribe) {
+		if (subs_interface_added_id == -1) {
+			subs_interface_added_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_ADDED, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_interface_removed_id == -1) {
+			subs_interface_removed_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_REMOVED, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_name_owner_id == -1) {
+			subs_name_owner_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_FREEDESKTOP_INTERFACE,
+				BT_NAME_OWNER_CHANGED, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_property_id == -1) {
+			subs_property_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_PROPERTIES_INTERFACE,
+				BT_PROPERTIES_CHANGED, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_adapter_id == -1) {
+			subs_adapter_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_ADAPTER_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_interface_added_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_interface_added_id);
+			subs_interface_added_id = -1;
+		}
+		if (subs_interface_removed_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_interface_removed_id);
+			subs_interface_removed_id = -1;
+		}
+		if (subs_name_owner_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_name_owner_id);
+			subs_name_owner_id = -1;
+		}
+		if (subs_property_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_property_id);
+			subs_property_id = -1;
+		}
+		if (subs_adapter_id == -1) {
+			g_dbus_connection_signal_unsubscribe(conn, subs_adapter_id);
+			subs_adapter_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_device_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_device_id = -1;
+
+	if (subscribe) {
+		if (subs_device_id == -1) {
+			subs_device_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_DEVICE_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_device_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_device_id);
+			subs_device_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_input_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_input_id = -1;
+
+	if (subscribe) {
+		if (subs_input_id == -1) {
+			subs_input_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_INPUT_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_input_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_input_id);
+			subs_input_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_network_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_serv_id = -1;
+	static int subs_client_id = -1;
+
+	if (subscribe) {
+		if (subs_serv_id == -1) {
+			subs_serv_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_NETWORK_SERVER_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_client_id == -1) {
+			subs_client_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_NETWORK_CLIENT_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_serv_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_serv_id);
+			subs_serv_id = -1;
+		}
+		if (subs_client_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_client_id);
+			subs_client_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_audio_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_headset_id = -1;
+	static int subs_sink_id = -1;
+
+	if (subscribe) {
+		if (subs_headset_id == -1) {
+			subs_headset_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_HEADSET_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+		if (subs_sink_id == -1) {
+			subs_sink_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_SINK_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_manager_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_headset_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_headset_id);
+			subs_headset_id = -1;
+		}
+		if (subs_sink_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_sink_id);
+			subs_sink_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_opp_server_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_opp_server_interface_added_id = -1;
+	static int subs_opp_server_interface_removed_id = -1;
+	static int subs_opp_server_property_id = -1;
+
+
+	if (subscribe) {
+		if (subs_opp_server_interface_added_id == -1) {
+			subs_opp_server_interface_added_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_ADDED, NULL, NULL, 0,
+				__bt_obexd_event_filter,
+				NULL, NULL);
+		}
+		if (subs_opp_server_interface_removed_id == -1) {
+			subs_opp_server_interface_removed_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_REMOVED, NULL, NULL, 0,
+				__bt_obexd_event_filter,
+				NULL, NULL);
+		}
+		if (subs_opp_server_property_id == -1) {
+			subs_opp_server_property_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_PROPERTIES_INTERFACE,
+				BT_PROPERTIES_CHANGED, NULL, NULL, 0,
+				__bt_obexd_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_opp_server_interface_added_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_server_interface_added_id);
+			subs_opp_server_interface_added_id = -1;
+		}
+		if (subs_opp_server_interface_removed_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_server_interface_removed_id);
+			subs_opp_server_interface_removed_id = -1;
+		}
+		if (subs_opp_server_property_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_server_property_id);
+			subs_opp_server_property_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_opp_client_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_opp_client_interface_added_id = -1;
+	static int subs_opp_client_interface_removed_id = -1;
+	static int subs_opp_client_property_id = -1;
+
+
+	if (subscribe) {
+		if (subs_opp_client_interface_added_id == -1) {
+			subs_opp_client_interface_added_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_ADDED, NULL, NULL, 0,
+				__bt_opc_event_filter,
+				NULL, NULL);
+		}
+		if (subs_opp_client_interface_removed_id == -1) {
+			subs_opp_client_interface_removed_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_MANAGER_INTERFACE,
+				BT_INTERFACES_REMOVED, NULL, NULL, 0,
+				__bt_opc_event_filter,
+				NULL, NULL);
+		}
+		if (subs_opp_client_property_id == -1) {
+			subs_opp_client_property_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_PROPERTIES_INTERFACE,
+				BT_PROPERTIES_CHANGED, NULL, NULL, 0,
+				__bt_opc_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_opp_client_interface_added_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_client_interface_added_id);
+			subs_opp_client_interface_added_id = -1;
+		}
+		if (subs_opp_client_interface_removed_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_client_interface_removed_id);
+			subs_opp_client_interface_removed_id = -1;
+		}
+		if (subs_opp_client_property_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_opp_client_property_id);
+			subs_opp_client_property_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_a2dp_subscribe_signal(GDBusConnection *conn,
+		int subscribe)
+{
+	if (conn == NULL)
+		return -1;
+
+	static int subs_a2dp_source_id = -1;
+	static int subs_a2dp_sink_id = -1;
+
+	if (subscribe) {
+		if (subs_a2dp_source_id == -1) {
+			subs_a2dp_source_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_A2DP_SOURCE_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_opc_event_filter,
+				NULL, NULL);
+		}
+		if (subs_a2dp_sink_id == -1) {
+			subs_a2dp_sink_id = g_dbus_connection_signal_subscribe(conn,
+				NULL, BT_SINK_INTERFACE,
+				NULL, NULL, NULL, 0,
+				__bt_opc_event_filter,
+				NULL, NULL);
+		}
+	} else {
+		if (subs_a2dp_source_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_a2dp_source_id);
+			subs_a2dp_source_id = -1;
+		}
+		if (subs_a2dp_sink_id != -1) {
+			g_dbus_connection_signal_unsubscribe(conn,
+					subs_a2dp_sink_id);
+			subs_a2dp_sink_id = -1;
+		}
+	}
+	return 0;
+}
+
+int _bt_register_service_event(GDBusConnection *g_conn, int event_type)
 {
 	BT_DBG("+");
 
-	DBusError dbus_error;
-	char *match1 = NULL;
-	char *match2 = NULL;
-	char *match3 = NULL;
-	char *match4 = NULL;
-	DBusConnection *conn;
-	DBusHandleMessageFunction event_func = NULL;
-
 	retv_if(g_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	conn = dbus_g_connection_get_connection(g_conn);
-	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	switch (event_type) {
 	case BT_MANAGER_EVENT:
-		event_func = __bt_manager_event_filter;
-		match1 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_ADDED);
-
-		match2 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_REMOVED);
-
-		match3 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_FREEDESKTOP_INTERFACE,
-					BT_NAME_OWNER_CHANGED);
-
-		match4 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_PROPERTIES_INTERFACE,
-					BT_PROPERTIES_CHANGED);
+		_bt_register_manager_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_DEVICE_EVENT:
-		match1 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_DEVICE_INTERFACE);
+		_bt_register_device_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_HID_EVENT:
-		match1 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_INPUT_INTERFACE);
+		_bt_register_input_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_NETWORK_EVENT:
-		match1 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_NETWORK_SERVER_INTERFACE);
-
-		match2 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_NETWORK_CLIENT_INTERFACE);
+		_bt_register_network_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_HEADSET_EVENT:
-		match1 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_HEADSET_INTERFACE);
-
-		match2 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_SINK_INTERFACE);
+		_bt_register_audio_subscribe_signal(g_conn, TRUE);
 		break;
+
 	case BT_OPP_SERVER_EVENT:
 		BT_ERR("BT_OPP_SERVER_EVENT: register service event");
-		event_func = __bt_obexd_event_filter;
-		match1 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_PROPERTIES_INTERFACE,
-					BT_PROPERTIES_CHANGED);
-
-		match2 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_ADDED);
-
-		match3 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_REMOVED);
+		_bt_register_opp_server_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_OPP_CLIENT_EVENT:
 		BT_ERR("BT_OPP_CLIENT_EVENT: register service event");
-		event_func = __bt_opc_event_filter;
-		match1 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_PROPERTIES_INTERFACE,
-					BT_PROPERTIES_CHANGED);
-
-		match2 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_ADDED);
-
-		match3 = g_strdup_printf(MANAGER_EVENT_MATCH_RULE,
-					BT_MANAGER_INTERFACE,
-					BT_INTERFACES_REMOVED);
+		_bt_register_opp_client_subscribe_signal(g_conn, TRUE);
 		break;
 	case BT_A2DP_SOURCE_EVENT:
 		BT_INFO("A2dp Source event");
-		match1 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_A2DP_SOURCE_INTERFACE);
-
-		match2 = g_strdup_printf(EVENT_MATCH_RULE,
-					BT_SINK_INTERFACE);
+		_bt_register_a2dp_subscribe_signal(g_conn, TRUE);
 		break;
 	default:
 		BT_ERR("Unknown event");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	if (event_func) {
-		if (!dbus_connection_add_filter(conn, event_func,
-						NULL, NULL)) {
-			BT_ERR("Fail to add filter");
-			goto fail;
-		}
-	}
-
-	dbus_error_init(&dbus_error);
-
-	if (match1)
-		dbus_bus_add_match(conn, match1, &dbus_error);
-
-	if (dbus_error_is_set(&dbus_error)) {
-		BT_ERR("Fail to add match: %s\n", dbus_error.message);
-		dbus_error_free(&dbus_error);
-		goto fail;
-	}
-
-	if (match2)
-		dbus_bus_add_match(conn, match2, &dbus_error);
-
-	if (dbus_error_is_set(&dbus_error)) {
-		BT_ERR("Fail to add match: %s\n", dbus_error.message);
-		dbus_error_free(&dbus_error);
-		goto fail;
-	}
-
-	if (match3)
-		dbus_bus_add_match(conn, match3, &dbus_error);
-
-	if (dbus_error_is_set(&dbus_error)) {
-		BT_ERR("Fail to add match: %s\n", dbus_error.message);
-		dbus_error_free(&dbus_error);
-		goto fail;
-	}
-
-	if (match4)
-		dbus_bus_add_match(conn, match4, &dbus_error);
-
-	if (dbus_error_is_set(&dbus_error)) {
-		BT_ERR("Fail to add match: %s\n", dbus_error.message);
-		dbus_error_free(&dbus_error);
-		goto fail;
-	}
-
-	g_free(match3);
-	g_free(match4);
-
-	g_free(match1);
-	g_free(match2);
-
 	return BLUETOOTH_ERROR_NONE;
-fail:
-	g_free(match1);
-	g_free(match2);
-
-	g_free(match3);
-	g_free(match4);
-
-	BT_DBG("-");
-
-	return BLUETOOTH_ERROR_INTERNAL;
 }
 
-void _bt_unregister_service_event(DBusGConnection *g_conn, int event_type)
+void _bt_unregister_service_event(GDBusConnection *g_conn, int event_type)
 {
 	BT_DBG("+");
 
-	DBusConnection *conn;
-	DBusHandleMessageFunction event_func;
-
 	ret_if(g_conn == NULL);
-	conn = dbus_g_connection_get_connection(g_conn);
 
 	switch (event_type) {
 	case BT_MANAGER_EVENT:
-		event_func = __bt_manager_event_filter;
+		_bt_register_manager_subscribe_signal(g_conn, FALSE);
+		_bt_register_device_subscribe_signal(g_conn, FALSE);
+		_bt_register_input_subscribe_signal(g_conn, FALSE);
+		_bt_register_network_subscribe_signal(g_conn, FALSE);
+		_bt_register_audio_subscribe_signal(g_conn, FALSE);
 		break;
 	case BT_OPP_SERVER_EVENT:
-		event_func = __bt_obexd_event_filter;
+		_bt_register_opp_server_subscribe_signal(g_conn, FALSE);
 		break;
 	case BT_OPP_CLIENT_EVENT:
-		event_func = __bt_opc_event_filter;
+		_bt_register_opp_client_subscribe_signal(g_conn, FALSE);
 		break;
 	default:
 		BT_ERR("Unknown event");
 		return;
 	}
 
-	ret_if(conn == NULL);
-
-	dbus_connection_remove_filter(conn, event_func, NULL);
 	BT_DBG("-");
 }
 
@@ -3304,10 +3120,10 @@ static int __bt_init_manager_receiver(void)
 	GError *error = NULL;
 
 	if (manager_conn == NULL) {
-		manager_conn = dbus_g_bus_get(DBUS_BUS_SYSTEM, &error);
+		manager_conn =  g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
 		if (error != NULL) {
 			BT_ERR("ERROR: Can't get on system bus [%s]", error->message);
-			g_error_free(error);
+			g_clear_error(&error);
 		}
 		retv_if(manager_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 	}
@@ -3315,7 +3131,6 @@ static int __bt_init_manager_receiver(void)
 	if (_bt_register_service_event(manager_conn,
 				BT_MANAGER_EVENT) != BLUETOOTH_ERROR_NONE)
 		goto fail;
-
 	if (_bt_register_service_event(manager_conn,
 				BT_DEVICE_EVENT) != BLUETOOTH_ERROR_NONE)
 		goto fail;
@@ -3331,11 +3146,10 @@ static int __bt_init_manager_receiver(void)
 	if (_bt_register_service_event(manager_conn,
 				BT_NETWORK_EVENT) != BLUETOOTH_ERROR_NONE)
 		goto fail;
-
 	return BLUETOOTH_ERROR_NONE;
 fail:
 	if (manager_conn) {
-		dbus_g_connection_unref(manager_conn);
+		g_object_unref(manager_conn);
 		manager_conn = NULL;
 	}
 
@@ -3350,17 +3164,18 @@ static int __bt_init_obexd_receiver(void)
 	GError *error = NULL;
 
 	if (obexd_conn == NULL) {
-		obexd_conn = dbus_g_bus_get(DBUS_BUS_SESSION, &error);
+		obexd_conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
 		if (error != NULL) {
 			BT_ERR("ERROR: Can't get on session bus [%s]", error->message);
-			g_error_free(error);
+			g_clear_error(&error);
 		}
 		retv_if(obexd_conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 	}
 
 	if (_bt_register_service_event(obexd_conn,
 				BT_OPP_SERVER_EVENT) != BLUETOOTH_ERROR_NONE) {
-		dbus_g_connection_unref(obexd_conn);
+		BT_ERR("Error while registering service event");
+		g_object_unref(obexd_conn);
 		obexd_conn = NULL;
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
@@ -3398,12 +3213,12 @@ void _bt_deinit_service_event_receiver(void)
 	_bt_unregister_service_event(obexd_conn, BT_OPP_SERVER_EVENT);
 
 	if (manager_conn) {
-		dbus_g_connection_unref(manager_conn);
+		g_object_unref(manager_conn);
 		manager_conn = NULL;
 	}
 
 	if (obexd_conn) {
-		dbus_g_connection_unref(obexd_conn);
+		g_object_unref(obexd_conn);
 		obexd_conn = NULL;
 	}
 

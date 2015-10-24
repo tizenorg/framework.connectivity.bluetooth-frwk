@@ -45,6 +45,7 @@ extern "C" {
 #define BLUETOOTH_VERSION_LENGTH_MAX       30 /**< This specifies bluetooth device version length */
 #define BLUETOOTH_INTERFACE_NAME_LENGTH        16
 #define BLUETOOTH_DEVICE_NAME_LENGTH_MAX       248 /**< This specifies maximum device name length */
+#define BLUETOOTH_DEVICE_PASSKEY_LENGTH_MAX       50 /**< This specifies maximum length of the passkey */
 #define BLUETOOTH_ADVERTISING_DATA_LENGTH_MAX	31 /**< This specifies maximum AD data length */
 #define BLUETOOTH_SCAN_RESP_DATA_LENGTH_MAX     31 /**< This specifies maximum LE Scan response data length */
 #define BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX	240 /**< This specifies maximum manufacturer data length */
@@ -55,7 +56,10 @@ extern "C" {
 #define BLUETOOTH_UUID_STRING_MAX 50
 #define BLUETOOTH_PATH_STRING 50
 
-#define BLUETOOTH_OOB_DATA_LENGTH		16
+#define BLUETOOTH_OOB_DATA_LENGTH 16
+
+#define BLUETOOTH_PIN_CODE_MAX_LENGTH 16
+
 /**
  * This is Bluetooth Connected event role
  */
@@ -212,6 +216,10 @@ typedef struct {
 	char data[BLUETOOTH_MANUFACTURER_DATA_LENGTH_MAX];
 } bluetooth_manufacturer_data_t;
 
+typedef struct {
+	char pin_code[BLUETOOTH_PIN_CODE_MAX_LENGTH + 1];
+} bluetooth_device_pin_code_t;
+
 /**
  * Adapter state
  */
@@ -268,6 +276,7 @@ typedef enum {
 	BLUETOOTH_HFG_SERVICE = 0x20,
 	BLUETOOTH_GATT_SERVICE = 0x40,
 	BLUETOOTH_NAP_SERVER_SERVICE = 0x80,
+	BLUETOOTH_A2DP_SINK_SERVICE = 0x100,
 } bluetooth_service_type_t;
 
 /**
@@ -344,6 +353,14 @@ typedef enum
 }bt_gatt_characteristic_property_t;
 
 /**
+* Remote device request types for attributes
+*/
+typedef enum {
+	BLUETOOTH_GATT_ATT_REQUEST_TYPE_READ = 0x00, /* Read Requested*/
+	BLUETOOTH_GATT_ATT_REQUEST_TYPE_WRITE = 0x01, /* Write Requested*/
+} bluetooth_gatt_att_request_tyep_t;
+
+/**
 * Advertising parameters
 */
 typedef struct {
@@ -366,11 +383,29 @@ typedef struct {
 	LE Connection Update
  */
 typedef struct {
-	guint16 interval_min;
-	guint16 interval_max;
+	float interval_min;
+	float interval_max;
 	guint16 latency;
-	guint16 time_out;
-} bluetooth_le_conn_update_t;
+	guint16 timeout;
+} bluetooth_le_connection_param_t;
+
+/*
+	LE Read Maximum Data Length
+ */
+typedef struct {
+	guint16 max_tx_octets;
+	guint16 max_tx_time;
+	guint16 max_rx_octets;
+	guint16 max_rx_time;
+} bluetooth_le_read_maximum_data_length_t;
+
+/*
+	LE Read Host suggested default Data Length
+ */
+typedef struct {
+	guint16 def_tx_octets;
+	guint16 def_tx_time;
+} bluetooth_le_read_host_suggested_data_length_t;
 
 /**
  * Samsung XSAT Vendor dependent command
@@ -409,6 +444,8 @@ typedef struct {
 								/**< Base ID for PBAP Client events */
 #define BLUETOOTH_EVENT_AVRCP_CONTROL_BASE ((int)(BLUETOOTH_EVENT_PBAP_CLIENT_BASE + 0x0020))
 								/**< Base ID for AVRCP events */
+#define BLUETOOTH_EVENT_IPSP_BASE ((int)(BLUETOOTH_EVENT_AVRCP_CONTROL_BASE + 0x0020))
+								/**< Base ID for IPSP events */
 
 /**
  * Bluetooth event type
@@ -439,6 +476,10 @@ typedef enum {
 	BLUETOOTH_EVENT_DEVICE_AUTHORIZED,	    /**< Bluetooth event authorize device */
 	BLUETOOTH_EVENT_DEVICE_UNAUTHORIZED,	    /**< Bluetooth event unauthorize device */
 	BLUETOOTH_EVENT_DISCOVERABLE_TIMEOUT_CHANGED,  /**< Bluetooth event mode changed */
+	BLUETOOTH_EVENT_KEYBOARD_PASSKEY_DISPLAY,	/**Bluetooth event for displaying keyboard  passkey to user*/
+	BLUETOOTH_EVENT_PIN_REQUEST,	/**Bluetooth event for PIN input by user*/
+	BLUETOOTH_EVENT_PASSKEY_REQUEST,	/**Bluetooth event for entering Passkey by user*/
+	BLUETOOTH_EVENT_PASSKEY_CONFIRM_REQUEST,	/**Bluetooth event for Passkey confirmation by user*/
 	BLUETOOTH_EVENT_CONNECTABLE_CHANGED,	    /**< Bluetooth event connectable changed */
 
 	BLUETOOTH_EVENT_RSSI_ENABLED,		/**< Bluetooth event RSSI monitoring enabled */
@@ -505,6 +546,8 @@ typedef enum {
 	BLUETOOTH_EVENT_GATT_DISCONNECTED, /**<Gatt Disconnected event */
 	BLUETOOTH_EVENT_GATT_SERVER_CHARACTERISTIC_VALUE_CHANGED, /**<Gatt Char write callback event */
 	BLUETOOTH_EVENT_GATT_SERVER_READ_REQUESTED, /** <GATT Characteristic/Descriptor Read Request event */
+	BLUETOOTH_EVENT_GATT_SERVER_VALUE_CHANGED, /** <GATT Characteristic/Descriptor Value change event */
+	BLUETOOTH_EVENT_GATT_SERVER_NOTIFICATION_STATE_CHANGED, /** <GATT Characteristic Notification change event */
 
 	BLUETOOTH_EVENT_AG_CONNECTED = BLUETOOTH_EVENT_AUDIO_BASE, /**<AG service connected event*/
 	BLUETOOTH_EVENT_AG_DISCONNECTED, /**<AG service disconnected event*/
@@ -542,6 +585,9 @@ typedef enum {
 
 	BLUETOOTH_HID_CONNECTED = BLUETOOTH_EVENT_HID_BASE, /**< Input connectd event*/
 	BLUETOOTH_HID_DISCONNECTED, /**< Input disconnectd event*/
+	BLUETOOTH_HID_DEVICE_CONNECTED, /**< HID Device connected event*/
+	BLUETOOTH_HID_DEVICE_DISCONNECTED, /**< HID Device disconnected event*/
+	BLUETOOTH_HID_DEVICE_DATA_RECEIVED, /**< HID Device data received event*/
 
 	BLUETOOTH_EVENT_ADVERTISING_STARTED = BLUETOOTH_EVENT_ADVERTISING_BASE, /**< Advertising started event */
 	BLUETOOTH_EVENT_ADVERTISING_STOPPED, /**< Advertising stopped event */
@@ -569,6 +615,11 @@ typedef enum {
 	BLUETOOTH_EVENT_AVRCP_SONG_POSITION_STATUS, /**<AVRCP control play Postion status event*/
 	BLUETOOTH_EVENT_AVRCP_PLAY_STATUS_CHANGED, /**<AVRCP control play status event*/
 	BLUETOOTH_EVENT_AVRCP_TRACK_CHANGED, /**<AVRCP control song metadata event*/
+
+	BLUETOOTH_EVENT_IPSP_INIT_STATE_CHANGED = BLUETOOTH_EVENT_IPSP_BASE, /**<IPSP init event*/
+	BLUETOOTH_EVENT_IPSP_CONNECTED, /**< IPSP connected event  */
+	BLUETOOTH_EVENT_IPSP_DISCONNECTED, /**< IPSP Disconnected event */
+	BLUETOOTH_EVENT_LE_DATA_LENGTH_CHANGED,  /** LE data length values changed */
 } bluetooth_event_type_t;
 
  /**
@@ -840,6 +891,15 @@ typedef enum {
 } bluetooth_le_scan_filter_feature_t;
 
 /**
+ * LE connection mode
+ */
+typedef enum {
+	BLUETOOTH_LE_CONNECTION_MODE_BALANCED,
+	BLUETOOTH_LE_CONNECTION_MODE_LOW_LATENCY,
+	BLUETOOTH_LE_CONNECTION_MODE_LOW_POWER
+} bluetooth_le_connection_mode_t;
+
+/**
 * structure to hold the device information
 */
 typedef struct {
@@ -908,6 +968,26 @@ typedef struct {
 } bluetooth_network_device_info_t;
 
 /**
+ * Authentication event types
+ */
+
+typedef enum {
+	BLUETOOTH_AUTH_KEYBOARD_PASSKEY_REQUEST = 0,
+	BLUETOOTH_AUTH_PIN_REQUEST,
+	BLUETOOTH_AUTH_PASSKEY_REQUEST,
+	BLUETOOTH_AUTH_PASSKEY_CONFIRM_REQUEST,
+} bluetooth_auth_type_t;
+
+/**
+* structure to hold the pincode/pass-key req informations
+*/
+typedef struct {
+	bluetooth_device_address_t device_address;  /**< remote device address */
+	bluetooth_device_name_t device_name;        /**< device name */
+	char str_passkey[BLUETOOTH_DEVICE_PASSKEY_LENGTH_MAX]; /**< pass-key string */
+} bluetooth_authentication_request_info_t;
+
+/**
 * Stucture to hold discovery option
 */
 typedef struct {
@@ -956,6 +1036,42 @@ typedef struct {
 } bluetooth_rfcomm_received_data_t;
 
 /**
+ * HID Header type
+ */
+typedef enum {
+	HTYPE_TRANS_HANDSHAKE,
+	HTYPE_TRANS_HID_CONTROL,
+	HTYPE_TRANS_GET_REPORT,
+	HTYPE_TRANS_SET_REPORT,
+	HTYPE_TRANS_GET_PROTOCOL,
+	HTYPE_TRANS_SET_PROTOCOL,
+	HTYPE_TRANS_DATA,
+	HTYPE_TRANS_UNKNOWN
+}bt_hid_header_type_t;
+
+/**
+ * HID Param type
+ */
+typedef enum {
+	PTYPE_DATA_RTYPE_INPUT,
+	PTYPE_DATA_RTYPE_OUTPUT
+}bt_hid_param_type_t;
+
+/**
+ * Stucture to hid receive data
+ */
+typedef struct {
+	const char *address;
+	bt_hid_header_type_t type;
+		/**< Header type containing */
+	bt_hid_param_type_t param;
+		/**< Param type in header like INPUT Report or OutPut Report */
+	int buffer_size;/**< the length of the receive buffer */
+	char *buffer;
+		/**< the receive data buffer */
+} bluetooth_hid_received_data_t;
+
+/**
 * Stucture to rfcomm connection
 */
 
@@ -986,6 +1102,13 @@ typedef struct {
 	bluetooth_device_address_t device_addr;
 					      /**< device address */
 } bluetooth_rfcomm_connection_request_t;
+
+typedef struct {
+	int socket_fd;
+		/**< the socket fd */
+	bluetooth_device_address_t device_addr;
+					      /**< device address */
+} bluetooth_hid_request_t;
 
 /**
  * HDP QOS types
@@ -1169,12 +1292,35 @@ typedef struct {
  * Structure to GATT Read Request
  */
 typedef struct {
-	char *char_handle;
+	char *att_handle;
 	char *service_handle;
 	char *address;
 	guint16 offset;
 	guint8 req_id;
 } bt_gatt_read_req_t;
+
+/**
+ * Structure to GATT Value change
+ */
+typedef struct {
+	char *att_handle;
+	char *service_handle;
+	char *address;
+	guint8 req_id;
+	guint16 offset;
+	guint8 *att_value;
+	guint32 val_len;
+} bt_gatt_value_change_t;
+
+/**
+ * Structure to GATT characteristc Notification change
+ */
+typedef struct {
+	char *att_handle;
+	char *service_handle;
+	gboolean att_notify;
+} bt_gatt_char_notify_change_t;
+
 
 /**
  * Structure to RSSI Signal Strength Alert
@@ -1335,6 +1481,18 @@ typedef struct {
 	GList *list;
 	int count;
 } bt_hf_call_list_s;
+
+/**
+ * Structure for LE data length change params
+ */
+
+typedef struct {
+	bluetooth_device_address_t device_address;
+	guint16 max_tx_octets;
+	guint16 max_tx_time;
+	guint16 max_rx_octets;
+	guint16 max_rx_time;
+} bt_le_data_length_params_t;
 
 /**
  * Callback pointer type
@@ -2932,6 +3090,32 @@ ret = bluetooth_authorize_device(&device_address,authorized);
  */
 int bluetooth_authorize_device(const bluetooth_device_address_t *device_address,
 				       gboolean authorized);
+
+int bluetooth_set_pin_code(const bluetooth_device_address_t *device_address,
+				const bluetooth_device_pin_code_t *pin_code);
+
+int bluetooth_unset_pin_code(const bluetooth_device_address_t *device_address);
+
+/**
+ * @fn int bluetooth_passkey_reply(char *passkey, gboolean reply)
+ *
+ * @brief Receives Legacy Passkey\pin with following authentication response types
+ *
+ * @param[in]   passkey : This is the PIN or PASSKEY string required for remote device authentication
+ * @param[in]   reply    TRUE : Accept AUthentication FALSE: Cancels authentication
+ *
+ */
+int bluetooth_passkey_reply(char *passkey, gboolean reply);
+
+/**
+ * @fn int bluetooth_passkey_confirmation_reply(gboolean reply);
+ *
+ * @brief This API sends user confirmation reply to the local adapter.
+ *
+ * @param[in] reply TRUE : Accept AUthentication FALSE: Cancels authentication
+ *
+ */
+int bluetooth_passkey_confirmation_reply(gboolean reply);
 
 /**
  * @fn int bluetooth_search_service(const bluetooth_device_address_t *device_address)
@@ -4919,6 +5103,8 @@ int bluetooth_gatt_unregister_service(const char *svc_path);
 *
 * @exception	 None
 * @param[in] request_id The identification of a read request
+* @param[in] req_type The identification of  request type (TRUE for Read request and FALSE for write request)
+* @param[in] resp_state The identification of response state
 * @param[in] offset The offset from where a value is read
 * @param[in] value The value to be sent. It will be sent from @a offset.
 *		If it is NULL, a requested GATT handle's value will be sent from @a offset.
@@ -4930,8 +5116,8 @@ int bluetooth_gatt_unregister_service(const char *svc_path);
 * @see	bluetooth_gatt_add_descriptor()
 * @see bluetooth_gatt_register_service()
 */
-int bluetooth_gatt_send_response(int request_id,
-				int offset, char *value, int value_length);
+int bluetooth_gatt_send_response(int request_id, guint req_type,
+				int resp_state, int offset, char *value, int value_length);
 
 
 /* @fn int bluetooth_gatt_delete_services(void)
@@ -4956,7 +5142,9 @@ int bluetooth_gatt_send_response(int request_id,
 */
 int bluetooth_gatt_delete_services(void);
 
-/* @fn int bluetooth_gatt_update_characteristic(void)
+/* @fn int bluetooth_gatt_notify_characteristics_value_change(const char *char_path,
+*		const char* char_value, int value_length,
+*		bluetooth_device_address_t *address)
 *
 * @brief updates the given characteristic with a new value
 *
@@ -4968,6 +5156,10 @@ int bluetooth_gatt_delete_services(void);
 *	 BLUETOOTH_ERROR_DEVICE_NOT_ENABLED - Adapter is disabled \n
 *
 * @exception	 None
+* @param[out] characteristic characteristic object path..
+* @param[in]   char_value Value of the GATT characteristic to be added.
+* @param[in]   value_length length of the chantacteristic value.
+* @param[in]   unicast_address remote device address. if set notification is sent to only one device.
 *
 * @remark  Adapter should be enabled
 * @see	bluetooth_gatt_add_service()
@@ -4976,8 +5168,9 @@ int bluetooth_gatt_delete_services(void);
 * @see bluetooth_gatt_register_service()
 * @see bluetooth_gatt_unregister_service()
 */
-int bluetooth_gatt_update_characteristic(const char *char_path,
-		const char* char_value, int value_length);
+int bluetooth_gatt_notify_characteristics_value_change(const char *char_path,
+		const char* char_value, int value_length,
+		bluetooth_device_address_t *unicast_address);
 
 /**
  * @fn int bluetooth_set_advertising(int handle, gboolean enable);
@@ -5254,7 +5447,7 @@ int bluetooth_clear_white_list(void);
 
 /**
  * @fn int bluetooth_le_conn_update(bluetooth_device_address_t *address,
- *          const bluetooth_le_conn_update_t *parameters)
+ *          const bluetooth_le_connection_param_t *parameters)
  * @brief update connection paramter of LE connection.
  *
  * This function is a synchronous call.
@@ -5270,7 +5463,7 @@ int bluetooth_clear_white_list(void);
  * @see     bluetooth_bond_device
  */
 int bluetooth_le_conn_update(const bluetooth_device_address_t *address,
-            const bluetooth_le_conn_update_t *parameters);
+            const bluetooth_le_connection_param_t *parameters);
 
 
 /**
@@ -5293,6 +5486,64 @@ int bluetooth_le_conn_update(const bluetooth_device_address_t *address,
  * @remark	None
  */
 int bluetooth_enable_le_privacy(gboolean enable_privacy);
+
+/**
+ * @fn int bluetooth_update_le_connection_mode(bluetooth_device_address_t *address,
+ *                                             bluetooth_le_connection_mode_t mode)
+ * @brief update connection paramter of LE connection.
+ *
+ * This function is a synchronous call.
+ *
+ * @return   BLUETOOTH_ERROR_NONE  - Success \n
+ *           BLUETOOTH_ERROR_INTERNAL - Internal Error \n
+ *           BLUETOOTH_ERROR_INVALID_PARAM - Parameter is not valid \n
+ *
+ * @exception  None
+ * @param[in]  address - remote device address value.
+ * @param[in]  mode - new connection mode.
+ *
+ * @remark       None
+ */
+int bluetooth_update_le_connection_mode(const bluetooth_device_address_t *address,
+		bluetooth_le_connection_mode_t mode);
+
+/**
+ * @fn int bluetooth_le_read_maximum_data_length()
+ * @brief reads the maximum LE data length supported in the controller.
+ *
+ * This function is a synchronous call.
+ *
+ * @return   BLUETOOTH_ERROR_NONE  - Success \n
+ *           BLUETOOTH_ERROR_INTERNAL - Internal Error \n
+ *
+ * @exception  None
+ *
+ * @remark       None
+ */
+int bluetooth_le_read_maximum_data_length(
+			bluetooth_le_read_maximum_data_length_t *max_le_datalength);
+/**
+ * @fn int bluetooth_le_write_host_suggested_default_data_length()
+ * @brief writes the host suggested values for the controllers max transmitted no of payload
+ * octects to be used for new connections.
+ *
+ * This function is a synchronous call.
+ *
+ * @return   BLUETOOTH_ERROR_NONE  - Success \n
+ *           BLUETOOTH_ERROR_INTERNAL - Internal Error \n
+ *
+ * @exception  None
+ *
+ * @remark       None
+ */
+int bluetooth_le_write_host_suggested_default_data_length(
+		const unsigned int def_tx_Octets, const unsigned int def_tx_Time);
+
+int bluetooth_le_read_suggested_default_data_length(
+	bluetooth_le_read_host_suggested_data_length_t *le_data_length);
+
+int bluetooth_le_set_data_length(bluetooth_device_address_t *address,
+	const unsigned int max_tx_octets, const unsigned int max_tx_time);
 
 int bluetooth_pbap_init(void);
 int bluetooth_pbap_deinit(void);

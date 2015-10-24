@@ -31,9 +31,9 @@
 extern "C" {
 #endif
 
-int _bt_send_event(int event_type, int event, int type, ...);
+int _bt_send_event(int event_type, int event, GVariant *param);
 
-int _bt_send_event_to_dest(const char* dest, int event_type, int event, int type, ...);
+int _bt_send_event_to_dest(const char* dest, int event_type, int event, GVariant *param);
 
 int _bt_init_service_event_sender(void);
 void _bt_deinit_service_event_sender(void);

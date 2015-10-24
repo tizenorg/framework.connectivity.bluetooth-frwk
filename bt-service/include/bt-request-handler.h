@@ -26,7 +26,6 @@
 #define _BT_REQUEST_HANDLER_H_
 
 #include <sys/types.h>
-#include <dbus/dbus-glib.h>
 #include <glib.h>
 #include <glib-object.h>
 
@@ -38,30 +37,6 @@ extern "C" {
 
 #define BT_SERVICE_NAME "org.projectx.bt"
 #define BT_SERVICE_PATH "/org/projectx/bt_service"
-
-#define BT_SERVICE_TYPE (bt_service_get_type())
-
-typedef struct _BtService
-{
-    GObject object;
-} BtService;
-
-typedef struct _BtServiceClass
-{
-    GObjectClass object_class;
-} BtServiceClass;
-
-gboolean bt_service_request(
-		BtService *service,
-		int service_type,
-		int service_function,
-		int request_type,
-		GArray* in_param1,
-		GArray* in_param2,
-		GArray* in_param3,
-		GArray* in_param4,
-		GArray* in_param5,
-		DBusGMethodInvocation *context);
 
 int _bt_service_register(void);
 

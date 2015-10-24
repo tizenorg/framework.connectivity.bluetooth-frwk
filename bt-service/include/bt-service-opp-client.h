@@ -27,6 +27,7 @@
 
 #include <glib.h>
 #include <sys/types.h>
+#include <gio/gio.h>
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
 
@@ -48,8 +49,8 @@ typedef struct {
 } bt_file_path_t;
 
 typedef struct {
-	DBusGProxy *proxy;
-	DBusGProxy *properties_proxy;
+	GDBusProxy *proxy;
+	GDBusProxy *properties_proxy;
 	char *transfer_name;
 	char *file_name;
 	char *transfer_path;
@@ -68,7 +69,6 @@ typedef struct {
 
 	char *address;
 	gboolean is_canceled;
-	DBusGProxyCall *sending_proxy;
 	bt_transfer_info_t *transfer_info;
 } bt_sending_info_t;
 
@@ -80,7 +80,7 @@ typedef struct {
 } bt_sending_data_t;
 
 
-int _bt_opp_client_push_files(int request_id, DBusGMethodInvocation *context,
+int _bt_opp_client_push_files(int request_id, GDBusMethodInvocation *context,
 				bluetooth_device_address_t *remote_address,
 				char **file_path, int file_count);
 

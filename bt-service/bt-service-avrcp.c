@@ -21,17 +21,15 @@
  *
  */
 
-#include <dbus/dbus-glib-lowlevel.h>
-#include <dbus/dbus-glib.h>
-#include <dbus/dbus.h>
+#include <gio/gio.h>
 #include <glib.h>
 #include <dlog.h>
 #include <string.h>
 #include <syspopup_caller.h>
+#include <dbus/dbus.h>
 
 #include "bluetooth-api.h"
 #include "bt-internal-types.h"
-
 #include "bt-service-common.h"
 #include "bt-service-avrcp.h"
 #include "bt-service-event.h"
@@ -64,51 +62,125 @@ static bt_player_settinngs_t player_status[] = {
 	{ STATUS_INVALID, "" }
 };
 
-DBusConnection *g_bt_dbus_conn = NULL;
+GDBusConnection *bt_gdbus_conn = NULL;
+static guint avrcp_reg_id = 0;
+static GDBusProxy *service_gproxy = NULL;
 
-static DBusHandlerResult _bt_avrcp_handle_set_property(DBusConnection *connection,
-				DBusMessage *message, void *user_data)
+/* Introspection data exposed from bt-service */
+static const gchar bt_avrcp_bluez_introspection_xml[] =
+"<node name='/'>"
+" <interface name='org.freedesktop.DBus.Properties'>"
+"     <method name='Set'>"
+"          <arg type='s' name='interface' direction='in'/>"
+"          <arg type='s' name='property' direction='in'/>"
+"          <arg type='v' name='value' direction='in'/>"
+"     </method>"
+" </interface>"
+"</node>";
+
+static gboolean __bt_media_emit_property_changed(GDBusConnection *connection,
+		const char *path, const char *interface, const char *name,
+		const GVariant *variant)
 {
-	BT_DBG("+");
-	const gchar *value;
-	unsigned int status;
-	gboolean shuffle_status;
-	DBusMessageIter args;
-	const char *property = NULL;
-	const char *interface = NULL;
-	DBusMessage *reply = NULL;
-	DBusHandlerResult result = DBUS_HANDLER_RESULT_HANDLED;
-	DBusMessageIter entry;
-	int type;
+	GVariantBuilder *builder = NULL;
+	GError *error = NULL;
 
+	builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+	g_variant_builder_add(builder, "{sv}", name, variant);
 
-	dbus_message_iter_init(message, &args);
-	dbus_message_iter_get_basic(&args, &interface);
-	dbus_message_iter_next(&args);
+	g_dbus_connection_emit_signal(connection, NULL, path,
+				DBUS_INTERFACE_PROPERTIES,
+				"PropertiesChanged",
+				g_variant_new("(sa{sv})",
+				interface, builder),
+				&error);
 
-	if (g_strcmp0(interface, BT_MEDIA_PLAYER_INTERFACE) != 0) {
-		result = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-		goto finish;
+	g_variant_builder_unref(builder);
+	if (error) {
+		BT_ERR("Could not Emit PropertiesChanged Signal: errCode[%x], message[%s]",
+			error->code, error->message);
+		g_clear_error(&error);
+		return FALSE;
 	}
 
-	dbus_message_iter_get_basic(&args, &property);
-	dbus_message_iter_next(&args);
-	dbus_message_iter_recurse(&args, &entry);
-	type = dbus_message_iter_get_arg_type(&entry);
+	return TRUE;
+}
 
-	BT_DBG("property %s\n", property);
+static GQuark __bt_avrcp_error_quark(void)
+{
+	static GQuark quark = 0;
 
-	if (g_strcmp0(property, "Shuffle") == 0) {
-		if (type != DBUS_TYPE_BOOLEAN) {
-			BT_DBG("Error");
-			reply = dbus_message_new_error(message, DBUS_ERROR_INVALID_ARGS,
-					"Invalid arguments");
-			dbus_connection_send(connection, reply, NULL);
-			result = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-			goto finish;
+	if (!quark)
+		quark = g_quark_from_static_string("bt-avrcp");
+
+	return quark;
+}
+
+static GError *__bt_avrcp_set_error(bt_avrcp_error_t error)
+{
+	BT_ERR("error[%d]\n", error);
+
+	switch (error) {
+	case BT_AVRCP_ERROR_INVALID_PARAM:
+		return g_error_new(BT_AVRCP_ERROR, error,
+				BT_ERROR_INVALID_PARAM);
+	case BT_AVRCP_ERROR_INVALID_INTERFACE:
+		return g_error_new(BT_AVRCP_ERROR, error,
+				BT_ERROR_INVALID_INTERFACE);
+	case BT_AVRCP_ERROR_INTERNAL:
+	default:
+		return g_error_new(BT_AVRCP_ERROR, error,
+				BT_ERROR_INTERNAL);
+	}
+}
+
+static void __bt_avrcp_agent_method(GDBusConnection *connection,
+		const gchar *sender,
+		const gchar *object_path,
+		const gchar *interface_name,
+		const gchar *method_name,
+		GVariant *parameters,
+		GDBusMethodInvocation *invocation,
+		gpointer user_data)
+{
+	BT_DBG("+");
+	BT_INFO("method %s", method_name);
+	BT_INFO("object_path %s", object_path);
+	int ret = BT_AVRCP_ERROR_NONE;
+	GError *err = NULL;
+	gboolean shuffle_status;
+	guint32 status;
+	gchar *interface = NULL;
+	gchar *property = NULL;
+	gchar *loop_status = NULL;
+	GVariant *value = NULL;
+
+	if (g_strcmp0(method_name, "Set") == 0) {
+		g_variant_get(parameters, "(&s&sv)", &interface, &property,
+				&value);
+
+		if (g_strcmp0(interface, BT_MEDIA_PLAYER_INTERFACE) != 0) {
+			ret = BT_AVRCP_ERROR_INVALID_INTERFACE;
+			goto fail;
 		}
-		dbus_message_iter_get_basic(&entry, &shuffle_status);
-		BT_DBG("value %d\n", shuffle_status);
+	}
+
+	if (value == NULL) {
+		BT_ERR("value is NULL");
+		goto fail;
+	}
+
+	BT_DBG("Property: %s\n", property);
+	if (g_strcmp0(property, "Shuffle") == 0) {
+
+		if (!g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+			BT_ERR("Error");
+			ret = BT_AVRCP_ERROR_INVALID_PARAM;
+			goto fail;
+		}
+
+		shuffle_status = g_variant_get_boolean(value);
+		BT_DBG("Value: %s\n", shuffle_status ? "TRUE" : "FALSE");
 		if (shuffle_status == TRUE)
 			status = SHUFFLE_ALL_TRACK;
 		else
@@ -116,466 +188,359 @@ static DBusHandlerResult _bt_avrcp_handle_set_property(DBusConnection *connectio
 
 		_bt_send_event(BT_AVRCP_EVENT,
 				BLUETOOTH_EVENT_AVRCP_SETTING_SHUFFLE_STATUS,
-				DBUS_TYPE_UINT32, &status,
-				DBUS_TYPE_INVALID);
-
+				g_variant_new("(u)", status));
 	} else if (g_strcmp0(property, "LoopStatus") == 0) {
-		if (type != DBUS_TYPE_STRING) {
-			BT_DBG("Error");
-			reply = dbus_message_new_error(message, DBUS_ERROR_INVALID_ARGS,
-					"Invalid arguments");
-			dbus_connection_send(connection, reply, NULL);
-			result = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-			goto finish;
-		}
-		dbus_message_iter_get_basic(&entry, &value);
-		BT_DBG("value %s\n", value);
 
-		if (g_strcmp0(value, "Track") == 0)
+		if (!g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
+			BT_ERR("Error");
+			ret = BT_AVRCP_ERROR_INVALID_PARAM;
+			goto fail;
+		}
+
+		loop_status = (gchar *)g_variant_get_string(value, NULL);
+		BT_DBG("Value: %s\n", loop_status);
+
+		if (g_strcmp0(loop_status, "Track") == 0)
 			status = REPEAT_SINGLE_TRACK;
-		else if (g_strcmp0(value, "Playlist") == 0)
+		else if (g_strcmp0(loop_status, "Playlist") == 0)
 			status = REPEAT_ALL_TRACK;
-		else if (g_strcmp0(value, "None") == 0)
+		else if (g_strcmp0(loop_status, "None") == 0)
 			status = REPEAT_MODE_OFF;
 		else
 			status = REPEAT_INVALID;
 
 		_bt_send_event(BT_AVRCP_EVENT,
 				BLUETOOTH_EVENT_AVRCP_SETTING_REPEAT_STATUS,
-				DBUS_TYPE_UINT32, &status,
-				DBUS_TYPE_INVALID);
+				g_variant_new("(u)", status));
 	}
-finish:
-	if (reply)
-		dbus_message_unref(reply);
-
-	return result;
-}
-
-static DBusHandlerResult _bt_avrcp_message_handle(DBusConnection *conn, DBusMessage *msg, void *user_data)
-{
-	BT_DBG("+");
-
-	if (dbus_message_is_method_call(msg, DBUS_INTERFACE_PROPERTIES, "Set"))
-		return _bt_avrcp_handle_set_property(conn, msg, user_data);
 
 	BT_DBG("-");
-	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	return;
+
+fail:
+	if (value)
+		g_variant_unref(value);
+	err = __bt_avrcp_set_error(ret);
+	g_dbus_method_invocation_return_gerror(invocation, err);
+	g_clear_error(&err);
+	BT_INFO("-");
 }
 
-static DBusObjectPathVTable bt_object_table = {
-        .message_function       = _bt_avrcp_message_handle,
+static const GDBusInterfaceVTable method_table = {
+	__bt_avrcp_agent_method,
+	NULL,
+	NULL,
 };
 
-gboolean bt_dbus_register_object_path(DBusConnection *connection,
-						const char *path)
+static GDBusNodeInfo *__bt_avrcp_create_method_node_info
+				(const gchar *introspection_data)
 {
-	if (!dbus_connection_register_object_path(connection, path,
-				&bt_object_table, NULL))
-		return FALSE;
-	return TRUE;
-}
+	GError *err = NULL;
+	GDBusNodeInfo *node_info = NULL;
 
-void bt_dbus_unregister_object_path(DBusConnection *connection,
-						const char *path)
-{
-	dbus_connection_unregister_object_path(connection, path);
-}
+	if (introspection_data == NULL)
+		return NULL;
 
-static void __bt_media_append_variant(DBusMessageIter *iter,
-			int type, void *value)
-{
-	char sig[2] = { type, '\0'};
-	DBusMessageIter value_iter;
+	node_info = g_dbus_node_info_new_for_xml(introspection_data, &err);
 
-	dbus_message_iter_open_container(iter, DBUS_TYPE_VARIANT, sig,
-							&value_iter);
-
-	dbus_message_iter_append_basic(&value_iter, type, value);
-
-	dbus_message_iter_close_container(iter, &value_iter);
-}
-
-static void __bt_media_append_dict_entry(DBusMessageIter *iter,
-			const char *key, int type, void *property)
-{
-	DBusMessageIter dict_entry;
-	const char *str_ptr;
-
-	if (type == DBUS_TYPE_STRING) {
-		str_ptr = *((const char **)property);
-		ret_if(str_ptr == NULL);
+	if (err) {
+		BT_ERR("Unable to create node: %s", err->message);
+		g_clear_error(&err);
 	}
 
-	dbus_message_iter_open_container(iter,
-					DBUS_TYPE_DICT_ENTRY,
-					NULL, &dict_entry);
-
-	dbus_message_iter_append_basic(&dict_entry, DBUS_TYPE_STRING, &key);
-
-	__bt_media_append_variant(&dict_entry, type, property);
-
-	dbus_message_iter_close_container(iter, &dict_entry);
+	return node_info;
 }
 
-static gboolean __bt_media_emit_property_changed(
-                                DBusConnection *connection,
-                                const char *path,
-                                const char *interface,
-                                const char *name,
-                                int type,
-                                void *property)
+static GDBusProxy *__bt_avrcp_gdbus_init_service_proxy(void)
 {
-	DBusMessage *sig;
-	DBusMessageIter entry, dict;
-	gboolean ret;
+	BT_DBG("+");
+	GDBusProxy *proxy;
+	GError *err = NULL;
+	char *adapter_path;
 
-	sig = dbus_message_new_signal(path, DBUS_INTERFACE_PROPERTIES,
-						"PropertiesChanged");
-	retv_if(sig == NULL, FALSE);
+	if (bt_gdbus_conn == NULL)
+		bt_gdbus_conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 
-	dbus_message_iter_init_append(sig, &entry);
-	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &interface);
-	dbus_message_iter_open_container(&entry, DBUS_TYPE_ARRAY,
-			DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-			DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
-			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
+	if (!bt_gdbus_conn) {
+		if (err) {
+			BT_ERR("Unable to connect to gdbus: %s", err->message);
+			g_clear_error(&err);
+		}
+		return NULL;
+	}
 
-	__bt_media_append_dict_entry(&dict,
-					name, type, property);
+	adapter_path = _bt_get_adapter_path();
+	retv_if(adapter_path == NULL, NULL);
 
-	dbus_message_iter_close_container(&entry, &dict);
+	proxy =  g_dbus_proxy_new_sync(bt_gdbus_conn,
+			G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME, adapter_path,
+			BT_MEDIA_INTERFACE, NULL, &err);
+	g_free(adapter_path);
 
-	ret = dbus_connection_send(connection, sig, NULL);
-	dbus_message_unref(sig);
+	if (!proxy) {
+		BT_ERR("Unable to create proxy");
+		if (err) {
+			BT_ERR("Error: %s", err->message);
+			g_clear_error(&err);
+		}
+		return NULL;
+	}
 
-	return ret;
+	BT_DBG("-");;
+	return proxy;
+}
+
+static GDBusProxy *__bt_avrcp_gdbus_get_service_proxy(void)
+{
+	return (service_gproxy) ? service_gproxy :
+			__bt_avrcp_gdbus_init_service_proxy();
 }
 
 int _bt_register_media_player(void)
 {
 	BT_DBG("+");
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusMessageIter iter;
-	DBusMessageIter property_dict;
-	DBusError err;
-	char *object;
-	char *adapter_path;
-	DBusConnection *conn;
-	DBusGConnection *gconn;
+	gchar *adapter_path;
 	gboolean shuffle_status;
+	gchar *path;
+	GDBusConnection *conn;
+	GDBusNodeInfo *node_info;
+	GDBusProxy *proxy;
+	GVariantBuilder *builder;
+	GVariant *ret;
+	GError *error = NULL;
 
 	media_player_settings_t player_settings = {0,};
 
 	player_settings.repeat  = REPEAT_MODE_OFF;
-
-	player_settings.shuffle = SHUFFLE_MODE_OFF;
 	player_settings.status = STATUS_STOPPED;
 	player_settings.position = 0;
+	shuffle_status = FALSE;
 
-
-	gconn = _bt_get_system_gconn();
-	retv_if(gconn  == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	conn = _bt_get_system_conn();
+	conn = _bt_get_system_gconn();
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
-	g_bt_dbus_conn = conn;
+	bt_gdbus_conn = conn;
 
+	node_info = __bt_avrcp_create_method_node_info(
+				bt_avrcp_bluez_introspection_xml);
+	if (node_info == NULL)
+		return BLUETOOTH_ERROR_INTERNAL;
 
-	if (!bt_dbus_register_object_path(conn, BT_MEDIA_OBJECT_PATH)){
-		BT_DBG("Could not register interface %s",
-				BT_MEDIA_PLAYER_INTERFACE);
+	avrcp_reg_id = g_dbus_connection_register_object(bt_gdbus_conn,
+					BT_MEDIA_OBJECT_PATH,
+					node_info->interfaces[0],
+					&method_table,
+					NULL, NULL, &error);
+	g_dbus_node_info_unref(node_info);
+
+	if (avrcp_reg_id == 0) {
+		BT_ERR("Failed to register: %s", error->message);
+		g_clear_error(&error);
+		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
 	adapter_path = _bt_get_adapter_path();
 	retv_if(adapter_path == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, adapter_path,
-				BT_MEDIA_INTERFACE, "RegisterPlayer");
-
+	proxy =  g_dbus_proxy_new_sync(conn,
+			G_DBUS_PROXY_FLAGS_NONE, NULL,
+			BT_BLUEZ_NAME, adapter_path,
+			BT_MEDIA_INTERFACE, NULL, &error);
 	g_free(adapter_path);
 
-	retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	object = g_strdup(BT_MEDIA_OBJECT_PATH);
-
-	dbus_message_iter_init_append(msg, &iter);
-	dbus_message_iter_append_basic(&iter, DBUS_TYPE_OBJECT_PATH, &object);
-	g_free(object);
-
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-			DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-			DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
-			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &property_dict);
-
-	__bt_media_append_dict_entry(&property_dict,
-		"LoopStatus",
-		DBUS_TYPE_STRING,
-		&loopstatus_settings[player_settings.repeat].property);
-
-	if (player_settings.shuffle == SHUFFLE_MODE_OFF)
-		shuffle_status = FALSE;
-	else
-		shuffle_status = TRUE;
-
-	__bt_media_append_dict_entry(&property_dict,
-		"Shuffle",
-		DBUS_TYPE_BOOLEAN,
-		&shuffle_status);
-
-	__bt_media_append_dict_entry(&property_dict,
-		"PlaybackStatus",
-		DBUS_TYPE_STRING,
-		&player_status[player_settings.status].property);
-
-
-	__bt_media_append_dict_entry(&property_dict,
-		"Position",
-		DBUS_TYPE_UINT32, &player_settings.position);
-
-	dbus_message_iter_close_container(&iter, &property_dict);
-
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(conn,
-				msg, -1, &err);
-	dbus_message_unref(msg);
-
-	if (!reply) {
-		BT_ERR("Error in registering the Music Player \n");
-
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
-			return BLUETOOTH_ERROR_INTERNAL;
+	if (proxy == NULL) {
+		BT_ERR("Unable to create proxy");
+		if (error) {
+			BT_ERR("Error: %s", error->message);
+			g_clear_error(&error);
 		}
+		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	if (reply)
-		dbus_message_unref(reply);
+	builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
 
-	BT_DBG("-");
+	g_variant_builder_add(builder, "{sv}", "LoopStatus",
+			g_variant_new("s",
+			loopstatus_settings[player_settings.repeat].property));
+	BT_ERR("LoopStatus: %s", loopstatus_settings[player_settings.repeat].property);
+
+	g_variant_builder_add(builder, "{sv}", "Shuffle",
+			g_variant_new("b", shuffle_status));
+
+	g_variant_builder_add(builder, "{sv}", "PlaybackStatus",
+			g_variant_new("s",
+			player_status[player_settings.status].property));
+	BT_ERR("PlaybackStatus: %s", player_status[player_settings.status].property);
+
+	g_variant_builder_add(builder, "{sv}", "Position",
+			g_variant_new("u", player_settings.position));
+
+	path = g_strdup(BT_MEDIA_OBJECT_PATH);
+	ret = g_dbus_proxy_call_sync(proxy, "RegisterPlayer",
+			g_variant_new("(oa{sv})", path, builder),
+			G_DBUS_CALL_FLAGS_NONE, -1,
+			NULL, &error);
+
+	g_object_unref(proxy);
+	g_free(path);
+	g_variant_builder_unref(builder);
+
+	if (ret == NULL) {
+		BT_ERR("Call RegisterPlayer Failed");
+		if (error) {
+			BT_ERR("errCode[%x], message[%s]",
+					error->code, error->message);
+			g_clear_error(&error);
+		}
+		return BLUETOOTH_ERROR_INTERNAL;
+	}
+
+	g_variant_unref(ret);
 	return BLUETOOTH_ERROR_NONE;
+}
+
+static void __bt_avrcp_unregister_object_path(void)
+{
+	if (avrcp_reg_id > 0) {
+		g_dbus_connection_unregister_object(bt_gdbus_conn,
+							avrcp_reg_id);
+		avrcp_reg_id = 0;
+	}
 }
 
 int _bt_unregister_media_player(void)
 {
 	BT_DBG("+");
-	DBusMessage *msg;
-	DBusMessage *reply;
-	DBusError err;
-	char *object;
-	char *adapter_path;
-	DBusConnection *conn;
+	GDBusProxy *proxy;
+	GVariant *ret;
+	GError *error = NULL;
+	GDBusConnection *conn;
+	gchar *path;
 
-	conn = g_bt_dbus_conn;
+	conn = bt_gdbus_conn;
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	adapter_path = _bt_get_adapter_path();
-	retv_if(adapter_path == NULL, BLUETOOTH_ERROR_INTERNAL);
+	proxy = __bt_avrcp_gdbus_get_service_proxy();
+	if (proxy == NULL)
+		return BLUETOOTH_ERROR_INTERNAL;
 
-	msg = dbus_message_new_method_call(BT_BLUEZ_NAME, adapter_path,
-				BT_MEDIA_INTERFACE, "UnregisterPlayer");
+	path = g_strdup(BT_MEDIA_OBJECT_PATH);
+	BT_DBG("path is [%s]", path);
 
+	ret = g_dbus_proxy_call_sync(proxy, "UnregisterPlayer",
+			g_variant_new("(o)", path),
+			G_DBUS_CALL_FLAGS_NONE, -1,
+			NULL, &error);
+	g_free(path);
 
-	g_free(adapter_path);
-
-	retv_if(msg == NULL, BLUETOOTH_ERROR_INTERNAL);
-
-	object = g_strdup(BT_MEDIA_OBJECT_PATH);
-
-	dbus_message_append_args(msg,
-				DBUS_TYPE_OBJECT_PATH, &object,
-				DBUS_TYPE_INVALID);
-
-	g_free(object);
-
-	dbus_error_init(&err);
-	reply = dbus_connection_send_with_reply_and_block(conn,
-				msg, -1, &err);
-	dbus_message_unref(msg);
-
-	if (!reply) {
-		BT_ERR("Error in unregistering the Music Player \n");
-
-		if (dbus_error_is_set(&err)) {
-			BT_ERR("%s", err.message);
-			dbus_error_free(&err);
-			return BLUETOOTH_ERROR_INTERNAL;
+	if (ret == NULL) {
+		BT_ERR("UnregisterPlayer failed");
+		if (error) {
+			BT_ERR("D-Bus API failure: errCode[%x], message[%s]",
+					error->code, error->message);
+			g_clear_error(&error);
 		}
-	} else {
-		dbus_message_unref(reply);
+		return BLUETOOTH_ERROR_INTERNAL;
 	}
 
-	bt_dbus_unregister_object_path(conn, BT_MEDIA_OBJECT_PATH);
-	g_bt_dbus_conn = NULL;
+	__bt_avrcp_unregister_object_path();
+
+	g_variant_unref(ret);
+	g_object_unref(bt_gdbus_conn);
+	bt_gdbus_conn = NULL;
 
 	BT_DBG("-");
 	return BLUETOOTH_ERROR_NONE;
-}
-
-static void __bt_media_append_metadata_entry(DBusMessageIter *metadata,
-			void *key_type, void *value, int type)
-{
-	BT_DBG("+");
-	DBusMessageIter string_entry;
-
-	dbus_message_iter_open_container(metadata,
-				DBUS_TYPE_DICT_ENTRY,
-				NULL, &string_entry);
-
-	dbus_message_iter_append_basic(&string_entry, DBUS_TYPE_STRING, key_type);
-
-	__bt_media_append_variant(&string_entry, type, value);
-
-	dbus_message_iter_close_container(metadata, &string_entry);
-	BT_DBG("-");
-}
-
-static void __bt_media_append_metadata_array(DBusMessageIter *metadata,
-			void *key_type, void *value, int type)
-{
-	BT_DBG("+");
-	DBusMessageIter string_entry, variant, array;
-	char array_sig[3] = { type, DBUS_TYPE_STRING, '\0' };
-
-	dbus_message_iter_open_container(metadata,
-				DBUS_TYPE_DICT_ENTRY,
-				NULL, &string_entry);
-	dbus_message_iter_append_basic(&string_entry, DBUS_TYPE_STRING, key_type);
-
-	dbus_message_iter_open_container(&string_entry, DBUS_TYPE_VARIANT,
-			array_sig, &variant);
-
-	dbus_message_iter_open_container(&variant, type,
-				DBUS_TYPE_STRING_AS_STRING, &array);
-	dbus_message_iter_append_basic(&array, DBUS_TYPE_STRING, value);
-
-	dbus_message_iter_close_container(&variant, &array);
-	dbus_message_iter_close_container(&string_entry, &variant);
-	dbus_message_iter_close_container(metadata, &string_entry);
-	BT_DBG("-");
 }
 
 int _bt_avrcp_set_track_info(media_metadata_attributes_t *meta_data)
 {
 	BT_DBG("+");
-	DBusMessage *sig;
-	DBusMessageIter iter;
-	DBusMessageIter property_dict, metadata_dict, metadata_variant, metadata;
-	DBusConnection *conn;
 	char *interface = BT_MEDIA_PLAYER_INTERFACE;
-	char * metadata_str = "Metadata";
-	const char *key_type;
+	GDBusConnection *conn;
+	GError *error = NULL;
+	GVariantBuilder *builder = NULL;
+	GVariantBuilder *inner_builder = NULL;
+	GVariant *children[1];
+	gboolean ret;
 
 	retv_if(meta_data == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	conn = g_bt_dbus_conn;
+	conn = bt_gdbus_conn;
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
-	sig = dbus_message_new_signal(BT_MEDIA_OBJECT_PATH, DBUS_INTERFACE_PROPERTIES,
-				"PropertiesChanged");
-	retv_if(sig == NULL, FALSE);
+	builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+	inner_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
 
-	dbus_message_iter_init_append(sig, &iter);
-	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &interface);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:title", g_variant_new_string(meta_data->title));
 
-	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
-				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-				DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
-				DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &property_dict);
+	children[0] = g_variant_new_string(meta_data->artist);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:artist", g_variant_new_array(G_VARIANT_TYPE_STRING,
+		children, 1));
 
-	dbus_message_iter_open_container(&property_dict,
-				DBUS_TYPE_DICT_ENTRY,
-				NULL, &metadata_dict);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:album", g_variant_new_string(meta_data->album));
 
-	dbus_message_iter_append_basic(&metadata_dict, DBUS_TYPE_STRING, &metadata_str);
+	children[0] = g_variant_new_string(meta_data->genre);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:genre", g_variant_new_array(G_VARIANT_TYPE_STRING,
+		children, 1));
 
-	dbus_message_iter_open_container(&metadata_dict, DBUS_TYPE_VARIANT, "a{sv}",
-				&metadata_variant);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:totalTracks", g_variant_new_int32(meta_data->total_tracks));
 
-	dbus_message_iter_open_container(&metadata_variant, DBUS_TYPE_ARRAY,
-				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
-				DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
-				DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &metadata);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"xesam:trackNumber", g_variant_new_int32(meta_data->number));
 
-	if (meta_data->title) {
-		key_type = "xesam:title";
-		__bt_media_append_metadata_entry(&metadata, &key_type,
-				&meta_data->title, DBUS_TYPE_STRING);
+	g_variant_builder_add(inner_builder, "{sv}",
+		"mpris:lenght", g_variant_new_int64(meta_data->duration));
+
+	g_variant_builder_add(builder, "{sv}",
+		"Metadata", g_variant_new("a{sv}", inner_builder));
+
+	ret = g_dbus_connection_emit_signal(conn, NULL, BT_MEDIA_OBJECT_PATH,
+				DBUS_INTERFACE_PROPERTIES,
+				"PropertiesChanged",
+				g_variant_new("(sa{sv})",
+				interface, builder),
+				&error);
+
+	g_variant_builder_unref(inner_builder);
+	g_variant_builder_unref(builder);
+
+	if (!ret) {
+		if (error != NULL) {
+			BT_ERR("D-Bus API failure: errCode[%x], message[%s]",
+				error->code, error->message);
+			g_clear_error(&error);
+		}
 	}
 
-	if (meta_data->artist) {
-		key_type = "xesam:artist";
-		__bt_media_append_metadata_array(&metadata, &key_type,
-				&meta_data->artist, DBUS_TYPE_ARRAY);
-	}
-
-	if (meta_data->album) {
-		key_type = "xesam:album";
-		__bt_media_append_metadata_entry(&metadata, &key_type,
-				&meta_data->album, DBUS_TYPE_STRING);
-	}
-
-	if (meta_data->genre) {
-		key_type = "xesam:genre";
-		__bt_media_append_metadata_array(&metadata, &key_type,
-				&meta_data->genre, DBUS_TYPE_ARRAY);
-	}
-
-	if (0 != meta_data->total_tracks) {
-		key_type = "xesam:totalTracks";
-		__bt_media_append_metadata_entry(&metadata, &key_type,
-				&meta_data->total_tracks, DBUS_TYPE_INT32);
-	}
-
-	if (0 != meta_data->number) {
-		key_type = "xesam:trackNumber";
-		__bt_media_append_metadata_entry(&metadata, &key_type,
-				&meta_data->number, DBUS_TYPE_INT32);
-	}
-
-	if (0 != meta_data->duration) {
-		key_type = "mpris:length";
-		__bt_media_append_metadata_entry(&metadata, &key_type,
-				&meta_data->duration, DBUS_TYPE_INT64);
-	}
-
-	dbus_message_iter_close_container(&metadata_variant, &metadata);
-	dbus_message_iter_close_container(&metadata_dict, &metadata_variant);
-	dbus_message_iter_close_container(&property_dict, &metadata_dict);
-	dbus_message_iter_close_container(&iter, &property_dict);
-
-	if (!dbus_connection_send(conn, sig, NULL))
-		BT_ERR("Unable to send TrackChanged signal\n");
-
-	dbus_message_unref(sig);
 	BT_DBG("-");
 	return BLUETOOTH_ERROR_NONE;
 }
 
-
 int _bt_avrcp_set_interal_property(int type, media_player_settings_t *properties)
 {
 	BT_DBG("+");
-	DBusConnection *conn;
+	GDBusConnection *conn;
 	int value;
 	media_metadata_attributes_t meta_data;
-	dbus_bool_t shuffle;
+	gboolean shuffle;
+	GVariantBuilder *builder = NULL;
+	GVariant *children[1];
 
-	conn = g_bt_dbus_conn;
+	conn = bt_gdbus_conn;
 	retv_if(conn == NULL, BLUETOOTH_ERROR_INTERNAL);
 
 	switch (type) {
 	case REPEAT:
 		value = properties->repeat;
-		if (!__bt_media_emit_property_changed(
-			conn,
-			BT_MEDIA_OBJECT_PATH,
-			BT_MEDIA_PLAYER_INTERFACE,
-			"LoopStatus",
-			DBUS_TYPE_STRING,
-			&loopstatus_settings[value].property)) {
+		if (!__bt_media_emit_property_changed(conn, BT_MEDIA_OBJECT_PATH,
+				BT_MEDIA_PLAYER_INTERFACE, "LoopStatus",
+				g_variant_new_string(loopstatus_settings[value].property))) {
 			BT_ERR("Error sending the PropertyChanged signal \n");
 			return BLUETOOTH_ERROR_INTERNAL;
 		}
@@ -583,62 +548,75 @@ int _bt_avrcp_set_interal_property(int type, media_player_settings_t *properties
 	case SHUFFLE:
 		value = properties->shuffle;
 		if (g_strcmp0(shuffle_settings[value].property, "off") == 0)
-			shuffle = 0;
+			shuffle = FALSE;
 		else
-			shuffle = 1;
+			shuffle = TRUE;
 
-		if (!__bt_media_emit_property_changed(
-			conn,
-			BT_MEDIA_OBJECT_PATH,
-			BT_MEDIA_PLAYER_INTERFACE,
-			"Shuffle",
-			DBUS_TYPE_BOOLEAN,
-			&shuffle)) {
-			BT_DBG("Error sending the PropertyChanged signal \n");
+		if (!__bt_media_emit_property_changed(conn, BT_MEDIA_OBJECT_PATH,
+				BT_MEDIA_PLAYER_INTERFACE, "Shuffle",
+				g_variant_new_boolean(shuffle))) {
+			BT_ERR("Error sending the PropertyChanged signal \n");
 			return BLUETOOTH_ERROR_INTERNAL;
 		}
 		break;
 	case STATUS:
 		value = properties->status;
-		if (!__bt_media_emit_property_changed(
-			conn,
-			BT_MEDIA_OBJECT_PATH,
-			BT_MEDIA_PLAYER_INTERFACE,
-			"PlaybackStatus",
-			DBUS_TYPE_STRING,
-			&player_status[value].property)) {
-			BT_DBG("Error sending the PropertyChanged signal \n");
+		if (!__bt_media_emit_property_changed(conn, BT_MEDIA_OBJECT_PATH,
+				BT_MEDIA_PLAYER_INTERFACE, "PlaybackStatus",
+				g_variant_new_string(player_status[value].property))) {
+			BT_ERR("Error sending the PropertyChanged signal \n");
 			return BLUETOOTH_ERROR_INTERNAL;
 		}
 		break;
 	case POSITION:
 		value = properties->position;
-		if (!__bt_media_emit_property_changed(
-			conn,
-			BT_MEDIA_OBJECT_PATH,
-			BT_MEDIA_PLAYER_INTERFACE,
-			"Position",
-			DBUS_TYPE_UINT32,
-			&value)) {
-			BT_DBG("Error sending the PropertyChanged signal \n");
+		if (!__bt_media_emit_property_changed(conn, BT_MEDIA_OBJECT_PATH,
+				BT_MEDIA_PLAYER_INTERFACE, "Position",
+				g_variant_new_uint32(value))) {
+			BT_ERR("Error sending the PropertyChanged signal \n");
 			return BLUETOOTH_ERROR_INTERNAL;
 		}
 		break;
 	case METADATA:
 		meta_data = properties->metadata;
-		if (!__bt_media_emit_property_changed(
-			conn,
-			BT_MEDIA_OBJECT_PATH,
-			BT_MEDIA_PLAYER_INTERFACE,
-			"Metadata",
-			DBUS_TYPE_ARRAY,
-			&meta_data)) {
-			BT_DBG("Error sending the PropertyChanged signal \n");
+
+		builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:title", g_variant_new_string(meta_data.title));
+
+		children[0] = g_variant_new_string(meta_data.artist);
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:artist", g_variant_new_array(G_VARIANT_TYPE_STRING,
+						children, 1));
+
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:album", g_variant_new_string(meta_data.album));
+
+		children[0] = g_variant_new_string(meta_data.genre);
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:genre", g_variant_new_array(G_VARIANT_TYPE_STRING,
+						children, 1));
+
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:totalTracks", g_variant_new_int32(meta_data.total_tracks));
+
+		g_variant_builder_add(builder, "{sv}",
+				"xesam:trackNumber", g_variant_new_int32(meta_data.number));
+
+		g_variant_builder_add(builder, "{sv}",
+				"mpris:lenght", g_variant_new_int64(meta_data.duration));
+
+		if (!__bt_media_emit_property_changed(conn, BT_MEDIA_OBJECT_PATH,
+				BT_MEDIA_PLAYER_INTERFACE, "Metadata",
+				g_variant_new("a{sv}", builder))) {
+			BT_ERR("Error sending the PropertyChanged signal \n");
+			g_variant_builder_unref(builder);
 			return BLUETOOTH_ERROR_INTERNAL;
 		}
+		g_variant_builder_unref(builder);
 		break;
 	default:
-		BT_DBG("Invalid Type\n");
+		BT_ERR("Invalid Type\n");
 		return BLUETOOTH_ERROR_INTERNAL;
 	}
 	BT_DBG("-");
