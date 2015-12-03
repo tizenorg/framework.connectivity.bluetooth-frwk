@@ -1842,7 +1842,8 @@ void _bt_handle_device_event(GVariant *msg, const char *member,const char *path)
 			buffer = (char *)g_variant_get_data(value);
 
 		le_dev_info->adv_data = g_memdup(buffer, buffer_len);
-		if (le_dev_info->adv_data == NULL) {
+		if (le_dev_info->adv_data == NULL &&
+			le_dev_info->adv_type != BT_LE_ADV_SCAN_RSP) {
 			_bt_free_le_device_info(le_dev_info);
 			g_variant_unref(value);
 			return;
