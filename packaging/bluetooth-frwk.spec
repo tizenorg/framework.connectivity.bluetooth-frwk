@@ -128,8 +128,9 @@ export CFLAGS="$CFLAGS -DUSB_BLUETOOTH"
 %endif
 
 export LDFLAGS+=" -Wl,--rpath=/usr/lib -Wl,--as-needed -Wl,--unresolved-symbols=ignore-in-shared-libs -pie"
-export CFLAGS+=" -fpie -DRFCOMM_DIRECT "
 
+#export CFLAGS+=" -fpie -DRFCOMM_DIRECT "
+export CFLAGS+=" -fpie -DRFCOMM_DIRECT -DGATT_NO_RELAY"
 cmake . -DCMAKE_INSTALL_PREFIX=/usr
 
 make

@@ -1425,6 +1425,7 @@ BT_EXPORT_API int bluetooth_gatt_write_descriptor_value(
 	return BLUETOOTH_ERROR_NONE;
 }
 
+#ifndef GATT_NO_RELAY
 static void __bluetooth_gatt_watch_characteristics(void)
 {
 	int result = BLUETOOTH_ERROR_NONE;
@@ -1441,6 +1442,7 @@ static void __bluetooth_gatt_watch_characteristics(void)
 
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 }
+#endif
 
 BT_EXPORT_API int bluetooth_gatt_watch_characteristics(const char *char_handle)
 {
@@ -1488,14 +1490,18 @@ BT_EXPORT_API int bluetooth_gatt_watch_characteristics(const char *char_handle)
 			ret = BLUETOOTH_ERROR_INTERNAL;
 
 		g_clear_error(&error);
-	} else {
-		/* Register the client sender to bt-service */
-		__bluetooth_gatt_watch_characteristics();
 	}
-	BT_DBG("-");
+#ifndef GATT_NO_RELAY
+	else {
+		/* Register the client sender to bt-service */
+		ret = __bluetooth_gatt_watch_characteristics();
+	}
+#endif
+
 	return ret;
 }
 
+#ifndef GATT_NO_RELAY
 static void __bluetooth_gatt_unwatch_characteristics(void)
 {
 	int result = BLUETOOTH_ERROR_NONE;
@@ -1512,7 +1518,7 @@ static void __bluetooth_gatt_unwatch_characteristics(void)
 
 	BT_FREE_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 }
-
+#endif
 
 BT_EXPORT_API int bluetooth_gatt_unwatch_characteristics(const char *char_handle)
 {
@@ -1544,10 +1550,13 @@ BT_EXPORT_API int bluetooth_gatt_unwatch_characteristics(const char *char_handle
 		BT_ERR("Watch Failed: %s", error->message);
 		g_clear_error(&error);
 		ret =  BLUETOOTH_ERROR_INTERNAL;
-	} else {
+	}
+#ifndef GATT_NO_RELAY
+	else {
 		/* Unregister the client sender to bt-service */
 		__bluetooth_gatt_unwatch_characteristics();
 	}
+#endif
 	BT_DBG("-");
 	return ret;
 }

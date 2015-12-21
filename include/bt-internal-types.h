@@ -69,6 +69,9 @@ typedef enum {
 	BT_AVRCP_CONTROL_EVENT,
 	BT_A2DP_SOURCE_EVENT,
 	BT_HID_DEVICE_EVENT,
+#ifdef GATT_NO_RELAY
+	BT_GATT_BLUEZ_EVENT, /* GattValueChanged from bluez directly */
+#endif
 	/* Will be added */
 } bt_event_type_t;
 
@@ -286,8 +289,10 @@ typedef enum {
 	BT_GATT_SET_PROPERTY_REQUEST,
 	BT_GATT_READ_CHARACTERISTIC,
 	BT_GATT_DISCOVER_CHARACTERISTICS_DESCRIPTOR,
+#ifndef GATT_NO_RELAY
 	BT_GATT_WATCH_CHARACTERISTIC,
 	BT_GATT_UNWATCH_CHARACTERISTIC,
+#endif
 	BT_LE_IPSP_INIT = BT_FUNC_IPSP_BASE,
 	BT_LE_IPSP_DEINIT,
 	BT_LE_IPSP_CONNECT,
@@ -322,6 +327,9 @@ typedef struct {
 #define BT_HF_SERVICE_INTERFACE "org.tizen.HfApp"
 #define BT_CORE_EVENT_INTERFACE "org.projectx.bt_core_event"
 #define BT_HF_LOCAL_TERM_EVENT_INTERFACE "org.projectx.bt_hf_local_term"
+#ifdef GATT_NO_RELAY
+#define BT_GATT_CHARACTERISTIC_INTERFACE "org.bluez.GattCharacteristic1"
+#endif
 
 #define BT_ADAPTER_PATH "/org/projectx/bt/adapter"
 #define BT_LE_ADAPTER_PATH "/org/projectx/bt/le/adapter"
@@ -430,6 +438,9 @@ typedef struct {
 #define BT_GATT_CONNECTED "GattConnected"
 #define BT_GATT_DISCONNECTED "GattDisconnected"
 #define BT_GATT_CHAR_VAL_CHANGED "GattCharValueChanged"
+#ifdef GATT_NO_RELAY
+#define BT_GATT_BLUEZ_CHAR_VAL_CHANGED "GattValueChanged"
+#endif
 #define BT_HARDWARE_ERROR "HardwareError"
 #define BT_TX_TIMEOUT_ERROR "TxTimeoutError"
 #define BT_HF_LOCAL_TERM "HandsfreeLocalTermination"

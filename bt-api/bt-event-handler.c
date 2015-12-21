@@ -790,10 +790,24 @@ void __bt_device_event_filter(GDBusConnection *connection,
 	event_info = (bt_event_info_t *)user_data;
 	ret_if(event_info == NULL);
 
+#ifdef GATT_NO_RELAY
+	gboolean gatt_interface = FALSE;
+
+	if (strcasecmp(interface_name, BT_GATT_CHARACTERISTIC_INTERFACE) == 0)
+		gatt_interface = TRUE;
+
+	if (strcasecmp(object_path, BT_DEVICE_PATH) != 0 &&
+		 gatt_interface == FALSE)
+		return;
+	if (strcasecmp(interface_name, BT_EVENT_SERVICE) != 0 &&
+		 gatt_interface == FALSE)
+		return;
+#else
 	if (strcasecmp(object_path, BT_DEVICE_PATH) != 0)
 		return;
 	if (strcasecmp(interface_name, BT_EVENT_SERVICE) != 0)
 		return;
+#endif
 
 	ret_if(signal_name == NULL);
 
@@ -819,7 +833,11 @@ void __bt_device_event_filter(GDBusConnection *connection,
 		_bt_common_event_cb(BLUETOOTH_EVENT_GATT_DISCONNECTED,
 				result, &dev_address,
 				event_info->cb, event_info->user_data);
+#ifdef GATT_NO_RELAY
+	} else if (strcasecmp(signal_name, BT_GATT_BLUEZ_CHAR_VAL_CHANGED) == 0) {
+#else
 	} else if (strcasecmp(signal_name, BT_GATT_CHAR_VAL_CHANGED) == 0) {
+#endif
 		const char *char_handle = NULL;
 		int len = 0;
 		const char * value = NULL;
@@ -842,6 +860,8 @@ void __bt_device_event_filter(GDBusConnection *connection,
 			if (char_val.char_value == NULL) {
 				BT_ERR("BLUETOOTH_ERROR_OUT_OF_MEMORY");
 				g_free(char_val.char_handle);
+				if (char_value_var)
+					g_variant_unref(char_value_var);
 				return;
 			}
 			memcpy(char_val.char_value, value, len);
@@ -849,6 +869,8 @@ void __bt_device_event_filter(GDBusConnection *connection,
 					result, &char_val,
 					event_info->cb, event_info->user_data);
 			g_free(char_val.char_value);
+			if (char_value_var)
+				g_variant_unref(char_value_var);
 		}
 		g_free(char_val.char_handle);
 	} else if (strcasecmp(signal_name, BT_DEVICE_CONNECTED) == 0) {
@@ -2581,6 +2603,14 @@ int _bt_register_event(int event_type, void *event_cb, void *user_data)
 		event_func = __bt_hid_device_event_filter;
 		path = BT_HID_DEVICE_PATH;
 		break;
+#ifdef GATT_NO_RELAY
+	case BT_GATT_BLUEZ_EVENT:
+		BT_DBG("BT_GATT_BLUEZ_EVENT");
+		event_func = __bt_device_event_filter;
+		interface = BT_GATT_CHARACTERISTIC_INTERFACE;
+		path = NULL;
+		break;
+#endif
 	default:
 		BT_ERR("Unknown event");
 		return BLUETOOTH_ERROR_INTERNAL;

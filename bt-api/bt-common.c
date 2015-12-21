@@ -1724,6 +1724,11 @@ BT_EXPORT_API int bluetooth_register_callback(bluetooth_cb_func_ptr callback_ptr
 	ret = _bt_register_event(BT_RFCOMM_SERVER_EVENT, (void *)callback_ptr, user_data);
 	if (ret != BLUETOOTH_ERROR_NONE)
 		goto fail;
+#ifdef GATT_NO_RELAY
+	ret = _bt_register_event(BT_GATT_BLUEZ_EVENT, (void *)callback_ptr, user_data);
+	if (ret != BLUETOOTH_ERROR_NONE)
+		goto fail;
+#endif
 
 	_bt_register_name_owner_changed();
 
