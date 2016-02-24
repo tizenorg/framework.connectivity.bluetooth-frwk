@@ -1516,7 +1516,6 @@ int __bt_bluez_request(int function_name,
 	case BT_GATT_DISCOVER_CHARACTERISTICS_DESCRIPTOR:
 		/* Just call to check the privilege */
 		break;
-#ifndef GATT_NO_RELAY
 	case BT_GATT_WATCH_CHARACTERISTIC: {
 		char *sender = NULL;
 
@@ -1535,7 +1534,6 @@ int __bt_bluez_request(int function_name,
 
 		break;
 	}
-#endif
 	case BT_LE_IPSP_INIT:
 		result = _bt_initialize_ipsp();
 		break;
@@ -2211,10 +2209,8 @@ gboolean __bt_service_check_privilege(int function_name,
 	case BT_GATT_SET_PROPERTY_REQUEST:
 	case BT_GATT_READ_CHARACTERISTIC:
 	case BT_GATT_DISCOVER_CHARACTERISTICS_DESCRIPTOR:
-#ifndef GATT_NO_RELAY
 	case BT_GATT_WATCH_CHARACTERISTIC:
 	case BT_GATT_UNWATCH_CHARACTERISTIC:
-#endif
 
 		ret_val = security_server_check_privilege_by_cookie(cookie,
 						BT_PRIVILEGE_PUBLIC, "w");

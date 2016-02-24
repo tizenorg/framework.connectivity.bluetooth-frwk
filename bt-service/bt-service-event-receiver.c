@@ -1438,44 +1438,7 @@ void __bt_gatt_char_property_changed_event(GVariant *msg,
 	}
 	g_free(char_handle);
 }
-
-void _bt_handle_gatt_event(GVariant *msg, const char *member, const char *path)
-{
-	ret_if(path == NULL);
-
-	if (strcasecmp(member, "GattValueChanged") == 0) {
-
-#if 0 // Debug Only
-		/*** Debug only ***/
-		GVariant *value = NULL;
-		int value_len = 0;
-		char *buffer = NULL;
-
-		g_variant_get(msg, "(is@ay)", NULL, NULL, &value);
-		value_len = g_variant_get_size(value);
-		if (value_len > 0) {
-			char buf[8 * 5 + 1] = { 0 };
-			int i;
-			int to;
-			buffer = (char *)g_variant_get_data(value);
-			to = value_len > (sizeof(buf) / 5) ? sizeof(buf) / 5 : value_len;
-
-			for (i = 0; i < to; i++)
-				snprintf(&buf[i * 5], 6, "0x%02x ", buffer[i]);
-			buf[i * 5] = '\0';
-			BT_DBG("GATT Val[%d] %s", value_len, buf);
-		}
-		g_variant_unref(value);
-		/******/
-#endif
-
-		/* Send event only registered client */
-		_bt_send_char_value_changed_event(msg);
-	}
-}
-
-
-void _bt_handle_device_event(GVariant *msg, const char *member, const char *path)
+void _bt_handle_device_event(GVariant *msg, const char *member,const char *path)
 {
 	int event;
 	int result = BLUETOOTH_ERROR_NONE;
@@ -1879,8 +1842,7 @@ void _bt_handle_device_event(GVariant *msg, const char *member, const char *path
 			buffer = (char *)g_variant_get_data(value);
 
 		le_dev_info->adv_data = g_memdup(buffer, buffer_len);
-		if (le_dev_info->adv_data == NULL &&
-			le_dev_info->adv_type != BT_LE_ADV_SCAN_RSP) {
+		if (le_dev_info->adv_data == NULL) {
 			_bt_free_le_device_info(le_dev_info);
 			g_variant_unref(value);
 			return;
@@ -2523,8 +2485,6 @@ static  void __bt_manager_event_filter(GDBusConnection *connection,
 		_bt_handle_agent_event(parameters, signal_name);
 	} else if (g_strcmp0(interface_name, BT_DEVICE_INTERFACE) == 0) {
 		_bt_handle_device_event(parameters, signal_name, object_path);
-	} else if (g_strcmp0(interface_name, BT_GATT_CHAR_INTERFACE) == 0) {
-		_bt_handle_gatt_event(parameters, signal_name, object_path);
 	}
 
 	return;
@@ -2741,7 +2701,6 @@ int _bt_register_manager_subscribe_signal(GDBusConnection *conn,
 	static int subs_name_owner_id = -1;
 	static int subs_property_id = -1;
 	static int subs_adapter_id = -1;
-	static int subs_gatt_id = -1;
 
 	if (subscribe) {
 		if (subs_interface_added_id == -1) {
@@ -2779,13 +2738,6 @@ int _bt_register_manager_subscribe_signal(GDBusConnection *conn,
 				__bt_manager_event_filter,
 				NULL, NULL);
 		}
-		if (subs_gatt_id == -1) {
-			subs_gatt_id = g_dbus_connection_signal_subscribe(conn,
-				NULL, BT_GATT_CHAR_INTERFACE,
-				NULL, NULL, NULL, 0,
-				__bt_manager_event_filter,
-				NULL, NULL);
-		}
 	} else {
 		if (subs_interface_added_id != -1) {
 			g_dbus_connection_signal_unsubscribe(conn,
@@ -2807,13 +2759,9 @@ int _bt_register_manager_subscribe_signal(GDBusConnection *conn,
 					subs_property_id);
 			subs_property_id = -1;
 		}
-		if (subs_adapter_id != -1) {
+		if (subs_adapter_id == -1) {
 			g_dbus_connection_signal_unsubscribe(conn, subs_adapter_id);
 			subs_adapter_id = -1;
-		}
-		if (subs_gatt_id != -1) {
-			g_dbus_connection_signal_unsubscribe(conn, subs_gatt_id);
-			subs_gatt_id = -1;
 		}
 	}
 	return 0;

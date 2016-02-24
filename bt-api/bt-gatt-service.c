@@ -81,10 +81,6 @@ static const gchar characteristics_introspection_xml[] =
 "	 </method>"
 "	 <method name='StopNotify'>"
 "	 </method>"
-"	 <method name='IndicateConfirm'>"
-"		<arg type='s' name='address' direction='in'/>"
-"		<arg type='b' name='complete' direction='in'/>"
-"	 </method>"
 "  </interface>"
 "  <interface name='org.freedesktop.DBus.Properties'>"
 "    <property type='s' name='UUID' access='read'>"
@@ -780,36 +776,6 @@ static void __bt_gatt_char_method_call(GDBusConnection *connection,
 				_bt_common_event_cb(
 					BLUETOOTH_EVENT_GATT_SERVER_NOTIFICATION_STATE_CHANGED,
 					BLUETOOTH_ERROR_NONE, &notify_change,
-					user_info->cb, user_info->user_data);
-			}
-		}
-	} else if (g_strcmp0(method_name, "IndicateConfirm") == 0) {
-		gchar *addr = NULL;
-		bt_gatt_indicate_confirm_t confirm = {0, };
-		bt_user_info_t *user_info = NULL;
-		gboolean complete = 0;
-		struct gatt_service_info *svc_info = NULL;
-
-		BT_DBG("IndicateConfirm");
-		BT_DBG("Application path = %s", object_path);
-		BT_DBG("Sender = %s", sender);
-
-		g_variant_get(parameters, "(&sb)", &addr, &complete);
-
-		BT_DBG("Remote Device address number = %s", addr);
-		confirm.att_handle = g_strdup(object_path);
-		confirm.address = g_strdup(addr);
-		confirm.complete = complete;
-
-		svc_info = __bt_gatt_find_gatt_service_from_char(object_path);
-		if (svc_info != NULL) {
-			confirm.service_handle = g_strdup(svc_info->serv_path);
-			user_info = _bt_get_user_data(BT_COMMON);
-
-			if (user_info != NULL) {
-				_bt_common_event_cb(
-					BLUETOOTH_EVENT_GATT_SERVER_INDICATE_CONFIRMED,
-					BLUETOOTH_ERROR_NONE, &confirm,
 					user_info->cb, user_info->user_data);
 			}
 		}
@@ -2009,9 +1975,9 @@ BT_EXPORT_API int bluetooth_gatt_delete_services(void)
 	return BLUETOOTH_ERROR_NONE;
 }
 
-BT_EXPORT_API int bluetooth_gatt_update_characteristic(
+BT_EXPORT_API int bluetooth_gatt_notify_characteristics_value_change(
 			const char *char_path, const char* char_value,
-			int value_length)
+			int value_length, bluetooth_device_address_t *unicast_address)
 {
 	GVariantBuilder *outer_builder;
 	GVariantBuilder *inner_builder;
@@ -2023,6 +1989,7 @@ BT_EXPORT_API int bluetooth_gatt_update_characteristic(
 	int i = 0;
 	gchar **line_argv = NULL;
 	gchar *serv_path = NULL;
+	char addr[20] = { 0 };
 
 	line_argv = g_strsplit_set(char_path, "/", 0);
 	serv_path = g_strdup_printf("/%s", line_argv[1]);
@@ -2046,6 +2013,14 @@ BT_EXPORT_API int bluetooth_gatt_update_characteristic(
 	outer_builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
 	g_variant_builder_add(outer_builder, "{sv}", "Value",
 					update_value);
+
+	if (unicast_address) {
+		_bt_convert_addr_type_to_string(addr,
+					(unsigned char *)unicast_address->addr);
+	}
+	g_variant_builder_add(outer_builder, "{sv}", "Unicast",
+				g_variant_new("s", addr));
+
 
 	BT_DBG("Updating characteristic value \n");
 	ret = g_dbus_connection_emit_signal(g_conn, NULL,
@@ -2220,66 +2195,4 @@ BT_EXPORT_API int bluetooth_gatt_send_response(int request_id, guint req_type,
 	}
 
 	return BLUETOOTH_ERROR_NONE;
-}
-
-BT_EXPORT_API int bluetooth_gatt_server_set_notification(const char *char_path,
-						bluetooth_device_address_t *unicast_address)
-{
-	GVariantBuilder *outer_builder;
-	GVariantBuilder *invalidated_builder;
-	GError *error = NULL;
-	gboolean notify = TRUE;
-	gboolean ret = TRUE;
-	int err = BLUETOOTH_ERROR_NONE;
-	gchar **line_argv = NULL;
-	gchar *serv_path = NULL;
-	char addr[20] = { 0 };
-
-	line_argv = g_strsplit_set(char_path, "/", 0);
-	serv_path = g_strdup_printf("/%s", line_argv[1]);
-
-	if (!__bt_gatt_get_service_state(serv_path)) {
-		BT_DBG("service not registered for this characteristic \n");
-		g_strfreev(line_argv);
-		return BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	outer_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
-	invalidated_builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
-
-	g_variant_builder_add(outer_builder, "{sv}", "Notifying",
-					g_variant_new("b", notify));
-
-	if (unicast_address) {
-		_bt_convert_addr_type_to_string(addr,
-					(unsigned char *)unicast_address->addr);
-	}
-	g_variant_builder_add(outer_builder, "{sv}", "Unicast",
-				g_variant_new("s", addr));
-
-	BT_DBG("Set characteristic Notification \n");
-	ret = g_dbus_connection_emit_signal(g_conn, NULL,
-					char_path,
-					"org.freedesktop.DBus.Properties",
-					"PropertiesChanged",
-					g_variant_new("(sa{sv}as)",
-					"org.bluez.GattCharacteristic1",
-					outer_builder, invalidated_builder),
-					&error);
-
-	if (!ret) {
-		if (error != NULL) {
-			BT_ERR("D-Bus API failure: errCode[%x], \
-					message[%s]",
-					error->code, error->message);
-			g_clear_error(&error);
-		}
-		err = BLUETOOTH_ERROR_INTERNAL;
-	}
-
-	g_strfreev(line_argv);
-	g_variant_builder_unref(outer_builder);
-	g_variant_builder_unref(invalidated_builder);
-
-	return err;
 }

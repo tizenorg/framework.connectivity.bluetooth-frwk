@@ -341,9 +341,7 @@ static void __bt_sending_release_cb(GDBusProxy *proxy,
 		BT_DBG("Session Removed");
 	}
 
-	if (sending_info->result != BLUETOOTH_ERROR_CANCEL_BY_USER)
-		sending_info->result = result;
-
+	sending_info->result = result;
 	param = g_variant_new("(isi)", sending_info->result,
 				sending_info->address,
 				sending_info->request_id);

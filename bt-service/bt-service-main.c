@@ -61,9 +61,7 @@ static void __bt_release_service(void)
 
 	_bt_clear_request_list();
 
-#ifndef GATT_NO_RELAY
 	_bt_clear_gatt_client_senders();
-#endif
 
 	BT_DBG("Terminating the bt-service daemon");
 }
@@ -265,9 +263,7 @@ int main(void)
 
 	_bt_init_request_list();
 
-#ifndef GATT_NO_RELAY
 	_bt_init_gatt_client_senders();
-#endif
 
 	g_timeout_add(500, (GSourceFunc)__bt_check_bt_service, NULL);
 

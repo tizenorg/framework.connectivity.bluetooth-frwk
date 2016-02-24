@@ -147,7 +147,6 @@ static void __accept_bdaddress(bluetooth_device_address_t *device_address)
 	if (addr) {
 		TC_PRT("Remote bd adress from file: %s", addr);
 		convert_addr_string_to_addr_type(device_address, addr);
-		g_free(addr);
 		return;
 	}
 

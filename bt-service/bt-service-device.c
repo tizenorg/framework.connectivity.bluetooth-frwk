@@ -34,7 +34,6 @@
 #include "bt-service-common.h"
 #include "bt-service-event.h"
 #include "bt-service-device.h"
-#include "bt-service-adapter-le.h"
 #include "bt-service-rfcomm-client.h"
 #include "bt-service-util.h"
 #include "bt-service-agent.h"
@@ -1548,7 +1547,7 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 		g_free(object_path);
 		if (device_proxy == NULL) {
 			BT_DBG("Device don't have this service");
-			return BLUETOOTH_ERROR_NONE;
+			return BLUETOOTH_ERROR_INTERNAL;
 		}
 
 		result = g_dbus_proxy_call_sync(device_proxy, "GetProperties",
@@ -1565,7 +1564,7 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 				g_error_free(error);
 			}
 			g_object_unref(device_proxy);
-			return BLUETOOTH_ERROR_NONE;
+			return BLUETOOTH_ERROR_INTERNAL;
 		}
 		g_variant_get(result , "(@a{sv})", &value);
 		g_variant_unref(result);
@@ -1587,7 +1586,7 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 		uuid = _bt_get_profile_uuid128(connection_type);
 		if (uuid == NULL) {
 			BT_ERR("uuid is NULL");
-			return BLUETOOTH_ERROR_NONE;
+			return BLUETOOTH_ERROR_INTERNAL;
 		}
 
 		BT_DBG("uuid: %s", uuid);
@@ -1602,7 +1601,7 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 		if (device_proxy == NULL) {
 			BT_DBG("Device don't have this service");
 			g_free(uuid);
-			return BLUETOOTH_ERROR_NONE;
+			return BLUETOOTH_ERROR_INTERNAL;
 		}
 
 		result = g_dbus_proxy_call_sync(device_proxy, "IsConnectedProfile",
@@ -1618,11 +1617,12 @@ int _bt_is_device_connected(bluetooth_device_address_t *device_address,
 				BT_ERR("Error occured in Proxy call [%s]\n", error->message);
 				g_error_free(error);
 			}
-		} else {
-			g_variant_get(result, "(b)", is_connected);
-			g_free(uuid);
-			g_variant_unref(result);
+			g_object_unref(device_proxy);
+			return BLUETOOTH_ERROR_INTERNAL;
 		}
+		g_variant_get(result, "(b)", is_connected);
+		g_free(uuid);
+		g_variant_unref(result);
 	}
 
 	g_object_unref(device_proxy);
@@ -1705,16 +1705,6 @@ static void __bt_connect_le_device_cb(GDBusProxy *proxy, GAsyncResult *res,
 
 	BT_DBG("+");
 	g_dbus_proxy_call_finish(proxy, res, &err);
-
-	/* When cb datas of lescan are received, back to parameta values for Web TCT */
-	if ( _bt_is_set_scan_parameter() == FALSE) {
-		bluetooth_le_scan_params_t scan_params;
-		BT_ERR("set parameter of lescan when receive cb data");
-		scan_params.type = BT_LE_ACTIVE_SCAN;
-		scan_params.interval = 5000;
-		scan_params.window = 500;
-		_bt_set_scan_parameters(&scan_params);
-	}
 
 	req_info = _bt_get_request_info(le_connection_info->req_id);
 	if (req_info == NULL) {
@@ -1820,16 +1810,6 @@ int _bt_connect_le_device(int request_id,
 	le_connection_info->addr = g_strdup(device_address);
 	le_connection_info->req_id = request_id;
 	le_connection_info->device_proxy = device_proxy;
-
-/* The connection between Ble device and TM1 often fail. So It need to be set for Web TCT*/
-	if ( _bt_is_set_scan_parameter() == FALSE) {
-		BT_ERR("set parameter of le scan when connect device");
-		bluetooth_le_scan_params_t scan_params;
-		scan_params.type = BT_LE_ACTIVE_SCAN;
-		scan_params.interval = 60;
-		scan_params.window = 60;
-		_bt_set_scan_parameters(&scan_params);
-	}
 
 	g_dbus_proxy_call(device_proxy, "ConnectLE",
 				 g_variant_new("(b)", auto_connect),

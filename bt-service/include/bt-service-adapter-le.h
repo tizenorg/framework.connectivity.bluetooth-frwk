@@ -136,8 +136,6 @@ void _bt_clear_gatt_client_senders(void);
 
 void _bt_send_char_value_changed_event(void *param);
 
-gboolean _bt_is_set_scan_parameter(void);
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
