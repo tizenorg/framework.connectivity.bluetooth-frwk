@@ -157,6 +157,8 @@ ln -s ../bluetooth-frwk.service %{buildroot}%{_libdir}/systemd/system/%{_service
 mkdir -p %{buildroot}%{_dumpdir}
 install -m 0755 bluetooth_log_dump.sh %{buildroot}%{_dumpdir}
 
+install -D -m 0644 bt-core/bluetooth-frwk-core.rule %{buildroot}%{_sysconfdir}/smack/accesses.d/bluetooth-frwk-core.rule
+
 #%post
 #%if "%{?tizen_profile_name}" == "wearable"
 #vconftool set -tf int db/bluetooth/status "1" -g 5000 -s tizen::vconf::public::r::platform::rw
@@ -225,6 +227,7 @@ ln -sf %{_libdir}/systemd/system/bluetooth-frwk.service %{_sysconfdir}/systemd/d
 %defattr(-, root, root)
 %{_datadir}/dbus-1/system-services/org.projectx.bt_core.service
 %{_bindir}/bt-core
+%{_sysconfdir}/smack/accesses.d/bluetooth-frwk-core.rule
 
 %files test
 %manifest bluetooth-frwk-test.manifest

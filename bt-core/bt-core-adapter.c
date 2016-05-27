@@ -438,9 +438,9 @@ void _bt_core_update_status(void)
 
 		BT_INFO("bt_status = %d, bt_le_status = %d", bt_status, bt_le_status);
 
-		if(bt_status == VCONFKEY_BT_STATUS_ON)
+		if(bt_status & VCONFKEY_BT_STATUS_ON)
 			__bt_core_set_status(BT_ACTIVATED);
-		if(bt_le_status == VCONFKEY_BT_LE_STATUS_ON)
+		if(bt_le_status & VCONFKEY_BT_LE_STATUS_ON)
 			__bt_core_set_le_status(BT_ACTIVATED);
 	}
 }

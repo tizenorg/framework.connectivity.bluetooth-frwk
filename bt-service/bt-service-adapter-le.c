@@ -87,6 +87,12 @@ static bt_le_scan_type_t le_scan_type = BT_LE_PASSIVE_SCAN;
 
 static GSList *gatt_client_senders = NULL;
 
+
+gboolean _bt_is_set_scan_parameter(void)
+{
+	return is_le_set_scan_parameter;
+}
+
 void _bt_init_gatt_client_senders(void)
 {
 	_bt_clear_request_list();

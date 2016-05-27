@@ -246,7 +246,7 @@ static int __bt_hdp_internal_create_application(unsigned int data_type,
 			BT_ERR("%s", err.message);
 
 			if (g_strrstr(err.message, BT_ACCESS_DENIED_MSG))
-				ret = BLUETOOTH_ERROR_ACCESS_DENIED;
+				ret = BLUETOOTH_ERROR_PERMISSION_DEINED;
 			else
 				ret = BLUETOOTH_ERROR_INTERNAL;
 

@@ -325,6 +325,12 @@ BT_EXPORT_API int bluetooth_connect_le(const bluetooth_device_address_t *device_
 	BT_CHECK_PARAMETER(device_address, return);
 	BT_CHECK_ENABLED_ANY(return);
 
+	if (_bt_check_privilege(BT_CHECK_PRIVILEGE, BT_CONNECT_LE)
+			== BLUETOOTH_ERROR_PERMISSION_DEINED) {
+		BT_ERR("Don't have a privilege to use this API");
+		return BLUETOOTH_ERROR_PERMISSION_DEINED;
+	}
+
 	BT_INIT_PARAMS();
 	BT_ALLOC_PARAMS(in_param1, in_param2, in_param3, in_param4, out_param);
 
